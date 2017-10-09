@@ -134,23 +134,12 @@ class Attacker(EvaluationBasedAgent):
                 c. eat foods (Distance to food)
                 d. capsule (Distance to Capsule = 0)
         """
-        successor = self.getSuccessor(gameState, action)
-
-        # # If capsule in enemy field exists, chasing capsule regardless foods.
-        # if len(self.getCapsules(gameState)) is not 0:
-        #     return {'distanceToCapsule': -5, 'distanceToGhost': 6}
-
-        # If opponent is scared, the agent should not care about distanceToGhost
-
         # #########################
         # Now our pacman will eat all capsules first, waste of capsules.
         # #########################
-
-        nearestGhostDist, nearestGhost = self.getNearestGhost(successor)
-        if nearestGhost is not None and nearestGhost.scaredTimer > 5:
-            return {'successorScore': 7, 'distanceToFood': -6}
-
         # Weights normally used
+        if gameState.getAgentState(self.index).numCarrying > 5:
+            return {'successorScore': 6, 'distanceToGhost': 8}
         return {'distanceToCapsule': -6, 'successorScore': 20, 'distanceToFood': -10, 'distanceToGhost': 8}
 
     def getNearestGhost(self, gameState):
@@ -185,7 +174,6 @@ class Attacker(EvaluationBasedAgent):
             actions = new_state.getLegalActions(self.index)
             # The agent should not stay put in the simulation
             actions.remove(Directions.STOP)
-            current_direction = new_state.getAgentState(self.index).configuration.direction
             # The agent should not use the reverse direction during simulation
             reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
             if reversed_direction in actions and len(actions) > 1:
@@ -353,10 +341,10 @@ class Attacker(EvaluationBasedAgent):
         if nearestGhost is not None and nearestGhost.isPacman and nearestMateDist > nearestGhostDist:
             return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
-        if nearestGhost is None or nearestGhost.scaredTimer > 5 \
-                or gameState.getAgentState(self.index).numCarrying < 4:
-            nearestFoodDist, nearestFood = self.getNearestFood(gameState)
-            return self.pureEnvBFS(gameState, nearestFood)
+        if nearestGhost is None or nearestGhost.scaredTimer > 5:
+            if gameState.getAgentState(self.index).numCarrying < 5:
+                nearestFoodDist, nearestFood = self.getNearestFood(gameState)
+                return self.pureEnvBFS(gameState, nearestFood)
         return self.getRationalActions(gameState)
 
 
