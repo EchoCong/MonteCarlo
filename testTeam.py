@@ -3,6 +3,8 @@ from captureAgents import AgentFactory
 from game import Directions
 import random, time, util
 from util import nearestPoint
+import sys
+sys.path.append('teams/<your team>/')
 
 def createTeam(firstIndex, secondIndex, isRed,
                first='Attacker', second='Defender'):
@@ -98,7 +100,7 @@ class Attacker(EvaluationBasedAgent):
         myPos = successor.getAgentState(self.index).getPosition()
 
         # Compute score from successor state
-        features['successorScore'] = self.getScore(successor) - self.getScore(gameState)
+        features['successorScore'] = self.getScore(successor)
 
         # Compute distance to capsule
         capsules = self.getCapsules(successor)
@@ -138,9 +140,7 @@ class Attacker(EvaluationBasedAgent):
         # Now our pacman will eat all capsules first, waste of capsules.
         # #########################
         # Weights normally used
-        if gameState.getAgentState(self.index).numCarrying > 5:
-            return {'successorScore': 6, 'distanceToGhost': 8}
-        return {'distanceToCapsule': -6, 'successorScore': 20, 'distanceToFood': -10, 'distanceToGhost': 8}
+        return {'distanceToCapsule': -3, 'successorScore': 200, 'distanceToFood': -5, 'distanceToGhost': 220}
 
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -277,15 +277,15 @@ class Attacker(EvaluationBasedAgent):
         actions.remove(Directions.STOP and action lead pacman into a empty alley)
         """
 
-        currentEnemyFood = len(self.getFood(gameState).asList())
-        if self.numEnemyFood != currentEnemyFood:
-            self.numEnemyFood = currentEnemyFood
-            self.inactiveTime = 0
-        else:
-            self.inactiveTime += 1
-        # If the agent dies, inactiveTime is reseted.
-        if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
-            self.inactiveTime = 0
+        # currentEnemyFood = len(self.getFood(gameState).asList())
+        # if self.numEnemyFood != currentEnemyFood:
+        #     self.numEnemyFood = currentEnemyFood
+        #     self.inactiveTime = 0
+        # else:
+        #     self.inactiveTime += 1
+        # # If the agent dies, inactiveTime is reseted.
+        # if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
+        #     self.inactiveTime = 0
 
         # Get valid actions. Staying put is almost never a good choice, so
         # the agent will ignore this action.
@@ -293,8 +293,8 @@ class Attacker(EvaluationBasedAgent):
         all_actions.remove(Directions.STOP)
         actions = []
         for a in all_actions:
-            # if not self.takeToEmptyAlley(gameState, a, 5):
-            actions.append(a)
+            if not self.takeToEmptyAlley(gameState, a, 5):
+                actions.append(a)
         if len(actions) == 0:
             actions = all_actions
 
@@ -332,19 +332,28 @@ class Attacker(EvaluationBasedAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
         nextAction = random.choice(ties)[1]
         """
-        myPos = gameState.getAgentState(self.index).getPosition()
         nearestGhostDist, nearestGhost = self.getNearestGhost(gameState)
         mates = self.getTeam(gameState)
         mates.remove(self.index)
-        nearestMateDist= min(self.getMazeDistance(myPos, gameState.getAgentState(mate).getPosition()) for mate in mates)
 
-        if nearestGhost is not None and nearestGhost.isPacman and nearestMateDist > nearestGhostDist:
-            return self.pureEnvBFS(gameState, nearestGhost.getPosition())
+        if nearestGhost is not None and nearestGhost.isPacman:
+            nearestMateDist = min(self.getMazeDistance(
+                nearestGhost.getPosition(),gameState.getAgentState(mate).getPosition()) for mate in mates)
+            if nearestMateDist > nearestGhostDist:
+                print "Eat Ghost"
+                print len(self.getFood(gameState).asList())
+                return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
             if gameState.getAgentState(self.index).numCarrying < 5:
+                print "Eat Food"
+                print len(self.getFood(gameState).asList())
+
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
                 return self.pureEnvBFS(gameState, nearestFood)
+        print "Rational Action"
+        print len(self.getFood(gameState).asList())
+
         return self.getRationalActions(gameState)
 
 
