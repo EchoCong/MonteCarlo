@@ -107,7 +107,7 @@ class Attacker(EvaluationBasedAgent):
             features["distanceToCapsule"] = nearestCapsuleDist
 
         # Compute distance to the nearest food
-        nearestFood, nearestFoodDist = self.getNearestFood(successor)
+        nearestFoodDist, nearestFood = self.getNearestFood(successor)
         if nearestFood is not None:
             features['distanceToFood'] = nearestFoodDist
 
@@ -136,9 +136,9 @@ class Attacker(EvaluationBasedAgent):
         """
         successor = self.getSuccessor(gameState, action)
 
-        # If capsule in enemy field exists, chasing capsule regardless foods.
-        if self.getCapsules(gameState) is not None:
-            return {'distanceToCapsule': -5, 'distanceToGhost': 6}
+        # # If capsule in enemy field exists, chasing capsule regardless foods.
+        # if len(self.getCapsules(gameState)) is not 0:
+        #     return {'distanceToCapsule': -5, 'distanceToGhost': 6}
 
         # If opponent is scared, the agent should not care about distanceToGhost
 
@@ -147,12 +147,11 @@ class Attacker(EvaluationBasedAgent):
         # #########################
 
         nearestGhostDist, nearestGhost = self.getNearestGhost(successor)
-        for agent in nearestGhost:
-            if agent[1].scaredTimer > 5:
-                return {'successorScore': 7, 'distanceToFood': -6}
+        if nearestGhost is not None and nearestGhost.scaredTimer > 5:
+            return {'successorScore': 7, 'distanceToFood': -6}
 
         # Weights normally used
-        return {'successorScore': 10, 'distanceToFood': -5, 'distanceToGhost': 2}
+        return {'distanceToCapsule': -6, 'successorScore': 20, 'distanceToFood': -10, 'distanceToGhost': 8}
 
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -167,6 +166,7 @@ class Attacker(EvaluationBasedAgent):
         foods = self.getFood(gameState).asList()
         if len(foods) > 0:
             return min([(self.getMazeDistance(myPos, food), food) for food in foods])
+        return None, None
 
     def uctSimulation(self, depth, gameState):
         """
@@ -280,7 +280,6 @@ class Attacker(EvaluationBasedAgent):
         #                          len(path + [action]) + self.getMazeDistance(succPos, goalPos))
         # return []
 
-
     def getRationalActions(self, gameState):
         """
         EXPAND Step in Monte Carlo Search Tree:
@@ -351,16 +350,13 @@ class Attacker(EvaluationBasedAgent):
         mates.remove(self.index)
         nearestMateDist= min(self.getMazeDistance(myPos, gameState.getAgentState(mate).getPosition()) for mate in mates)
 
-        if nearestGhost is not None:
-            if nearestGhost.isPacman and nearestMateDist > nearestGhostDist:
-                return self.pureEnvBFS(gameState, nearestGhost.getPosition())
+        if nearestGhost is not None and nearestGhost.isPacman and nearestMateDist > nearestGhostDist:
+            return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
-        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        scaredTimers = [ghost.scaredTimer for ghost in ghostsAll]
-        if sum(ghost > 5 for ghost in scaredTimers) == len(ghostsAll):
+        if nearestGhost is None or nearestGhost.scaredTimer > 5 \
+                or gameState.getAgentState(self.index).numCarrying < 4:
             nearestFoodDist, nearestFood = self.getNearestFood(gameState)
             return self.pureEnvBFS(gameState, nearestFood)
-
         return self.getRationalActions(gameState)
 
 
