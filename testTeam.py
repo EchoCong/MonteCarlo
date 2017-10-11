@@ -3,8 +3,6 @@ from captureAgents import AgentFactory
 from game import Directions
 import random, time, util
 from util import nearestPoint
-import sys
-sys.path.append('teams/<your team>/')
 
 def createTeam(firstIndex, secondIndex, isRed,
                first='Attacker', second='Defender'):
@@ -277,15 +275,15 @@ class Attacker(EvaluationBasedAgent):
         actions.remove(Directions.STOP and action lead pacman into a empty alley)
         """
 
-        # currentEnemyFood = len(self.getFood(gameState).asList())
-        # if self.numEnemyFood != currentEnemyFood:
-        #     self.numEnemyFood = currentEnemyFood
-        #     self.inactiveTime = 0
-        # else:
-        #     self.inactiveTime += 1
-        # # If the agent dies, inactiveTime is reseted.
-        # if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
-        #     self.inactiveTime = 0
+        currentEnemyFood = len(self.getFood(gameState).asList())
+        if self.numEnemyFood != currentEnemyFood:
+            self.numEnemyFood = currentEnemyFood
+            self.inactiveTime = 0
+        else:
+            self.inactiveTime += 1
+        # If the agent dies, inactiveTime is reseted.
+        if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
+            self.inactiveTime = 0
 
         # Get valid actions. Staying put is almost never a good choice, so
         # the agent will ignore this action.
@@ -293,8 +291,8 @@ class Attacker(EvaluationBasedAgent):
         all_actions.remove(Directions.STOP)
         actions = []
         for a in all_actions:
-            if not self.takeToEmptyAlley(gameState, a, 5):
-                actions.append(a)
+            # if not self.takeToEmptyAlley(gameState, a, 5):
+            actions.append(a)
         if len(actions) == 0:
             actions = all_actions
 
@@ -332,30 +330,26 @@ class Attacker(EvaluationBasedAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
         nextAction = random.choice(ties)[1]
         """
-        nearestGhostDist, nearestGhost = self.getNearestGhost(gameState)
+        myNearestGhostDist, nearestGhost = self.getNearestGhost(gameState)
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
         if nearestGhost is not None and nearestGhost.isPacman:
-            nearestMateDist = min(self.getMazeDistance(
+            print "Classical planning."
+            mateNearestGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(),gameState.getAgentState(mate).getPosition()) for mate in mates)
-            if nearestMateDist > nearestGhostDist:
-                print "Eat Ghost"
-                print len(self.getFood(gameState).asList())
+            if mateNearestGhostDist > myNearestGhostDist:
+                print "Help Mate!"
                 return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
+            print "Classical planning."
             if gameState.getAgentState(self.index).numCarrying < 5:
-                print "Eat Food"
-                print len(self.getFood(gameState).asList())
-
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
                 return self.pureEnvBFS(gameState, nearestFood)
-        print "Rational Action"
-        print len(self.getFood(gameState).asList())
 
+        print "UCT Planning."
         return self.getRationalActions(gameState)
-
 
 class Defender(CaptureAgent):
     "Gera Monte, o agente defensivo."
