@@ -117,6 +117,25 @@ class EvaluationBasedAgent(CaptureAgent):
                     queue.push((succState, path + [action]))
         return []
 
+    def compareSuccDistToFood(self, gameState, nearestFood):
+        actions = gameState.getLegalActions(self.index)
+        actions.remove(Directions.STOP)
+        goodActions = []
+        fvalues = []
+        for action in actions:
+            succState = gameState.generateSuccessor(self.index, action)
+            succPos = succState.getAgentPosition(self.index)
+            goodActions.append(action)
+            fvalues.append(self.getMazeDistance(succPos, nearestFood))
+
+        # Randomly chooses between ties.
+        best = min(fvalues)
+        ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
+
+        # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
+        return random.choice(ties)[1]
+
+
     def getRationalActions(self, gameState):
         """
         EXPAND Step in Monte Carlo Search Tree:
@@ -242,7 +261,9 @@ class Attacker(EvaluationBasedAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
         nextAction = random.choice(ties)[1]
         """
+        myPos = gameState.getAgentState(self.index).getPosition()
         myNearestGhostDist, nearestGhost = self.getNearestGhost(gameState)
+        capsuleDist, capsule = min([(self.getMazeDistance(myPos, cap), cap) for cap in self.getCapsules(gameState)])
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
@@ -250,14 +271,21 @@ class Attacker(EvaluationBasedAgent):
             mateNearestGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateNearestGhostDist > myNearestGhostDist:
-                print "Help Mate!"
+                # print "Help Mate!"
+                print "BFS"
                 return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
             if gameState.getAgentState(self.index).numCarrying < 5:
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
-                return self.pureEnvBFS(gameState, nearestFood)
+                print "Compare Distance"
+                return self.compareSuccDistToFood(gameState, nearestFood)
 
+        if nearestGhost is not None and capsuleDist < myNearestGhostDist:
+            print "Capsule"
+            return self.compareSuccDistToFood(gameState, capsule)
+
+        print "UCT"
         return self.getRationalActions(gameState)
 
 class Defender(CaptureAgent):
@@ -393,7 +421,7 @@ class Defender(CaptureAgent):
         best = min(fvalues)
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
 
-        # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
+        # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
         return random.choice(ties)[1]
 
 
@@ -457,7 +485,7 @@ class MCTSNode():
     while datetime.datetime.utcnow() - begin < self.calculate_time:
       self.run_simulation()
       games += 1
-    print "SIMULATION NUMBER", games
+    # print "SIMULATION NUMBER", games
 
     moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal]
 
@@ -546,7 +574,7 @@ class MCTSNode():
                   if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
                       continue
                   self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1
-              print self.index, "EAT GHOST +1"
+              # print self.index, "EAT GHOST +1"
               break
 
       x, y = nstate.getAgentState(self.index).getPosition()
@@ -561,7 +589,7 @@ class MCTSNode():
                   if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
                       continue
                   self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1
-              print self.index, "AVOID NEARBY GHOST +1"
+              # print self.index, "AVOID NEARBY GHOST +1"
               break
 
       # Capsule
@@ -574,7 +602,7 @@ class MCTSNode():
                   if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
                       continue
                   self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.0
-              print self.index, "EAT CAPSULE +1"
+              # print self.index, "EAT CAPSULE +1"
               break
 
       # Score
@@ -584,7 +612,7 @@ class MCTSNode():
               if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
                   continue
               self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.8
-          print self.index, "RETURN FOOD +1"
+          # print self.index, "RETURN FOOD +1"
           break
 
       # Food
@@ -594,7 +622,7 @@ class MCTSNode():
               if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
                   continue
               self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.0
-          print self.index, "AVOID GHOST +1"
+          # print self.index, "AVOID GHOST +1"
           break
 
 

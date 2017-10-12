@@ -80,6 +80,172 @@ class EvaluationBasedAgent(CaptureAgent):
     def getWeights(self, gameState, action):
         return {'successorScore': 1.0}
 
+    def getRationalActions(self, gameState):
+        """
+        EXPAND Step in Monte Carlo Search Tree:
+
+        actions = gameState.getLegalActions(self.index)
+        aBooleanValue = takeToEmptyAlley(self, gameState, action, depth)
+        actions.remove(Directions.STOP and action lead pacman into a empty alley)
+        """
+
+        currentEnemyFood = len(self.getFood(gameState).asList())
+        if self.numEnemyFood != currentEnemyFood:
+            self.numEnemyFood = currentEnemyFood
+            self.inactiveTime = 0
+        else:
+            self.inactiveTime += 1
+        # If the agent dies, inactiveTime is reseted.
+        if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
+            self.inactiveTime = 0
+
+        # Get valid actions. Staying put is almost never a good choice, so
+        # the agent will ignore this action.
+        all_actions = gameState.getLegalActions(self.index)
+        all_actions.remove(Directions.STOP)
+        actions = []
+        for a in all_actions:
+            # if not self.takeToEmptyAlley(gameState, a, 5):
+            actions.append(a)
+        if len(actions) == 0:
+            actions = all_actions
+
+        fvalues = []
+        for a in actions:
+            new_state = gameState.generateSuccessor(self.index, a)
+            value = 0
+            for i in range(1, 31):
+                value += self.uctSimulation(10, new_state)
+            fvalues.append(value)
+
+        best = max(fvalues)
+        ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
+        toPlay = random.choice(ties)[1]
+
+        # print 'eval time for offensive agent %d: %.4f' % (self.index, time.time() - start)
+        return toPlay
+
+    def getNearestGhost(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+        ghostsInRange = filter(lambda x: not x.isPacman and x.getPosition() is not None, ghostsAll)
+        if len(ghostsInRange) > 0:
+            return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
+        return None, None
+
+    def getNearestFood(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        foods = self.getFood(gameState).asList()
+        if len(foods) > 0:
+            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
+        return None, None
+
+    def getNearestCapsule(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        capsules = self.getCapsules(gameState)
+        if len(capsules) > 0:
+            return min([(self.getMazeDistance(myPos, cap), cap) for cap in capsules])
+        return None, None
+
+    def uctSimulation(self, depth, gameState):
+        """
+        SIMULATE and BACK UP STEP in Monte Carlo Search Tree:
+
+        Random simulate some actions for the agent. The actions other agents can take
+        are ignored, or, in other words, we consider their actions is always STOP.
+        The final state from the simulation is evaluated.
+
+        Should think how to implement algorithm.
+        return evaluateValue
+        """
+        new_state = gameState.deepCopy()
+        while depth > 0:
+            # Get valid actions
+            actions = new_state.getLegalActions(self.index)
+            # The agent should not stay put in the simulation
+            actions.remove(Directions.STOP)
+            # The agent should not use the reverse direction during simulation
+            reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
+            if reversed_direction in actions and len(actions) > 1:
+                actions.remove(reversed_direction)
+            # Randomly chooses a valid action
+            a = random.choice(actions)
+            # Compute new state and update depth
+            new_state = new_state.generateSuccessor(self.index, a)
+            depth -= 1
+        # Evaluate the final simulation state
+        return self.evaluate(new_state, Directions.STOP)
+
+    def pureEnvBFS(self, gameState, goalPos):
+        """
+        Called when otherAgentState.scaredTimer > 5 (goal is nearest food)
+         or otherAgent.isPacman in view && no mate around (goal is pacman):
+        Use A Star Algorithm to get the best next action to eat the nearest dot.
+        Using MazeDistance as heuristic value.
+        """
+        # ######################################
+        # try to solve with BFS
+        # ######################################
+        queue, expended, path = util.Queue(), [], []
+        queue.push((gameState, path))
+
+        while not queue.isEmpty():
+            currState, path = queue.pop()
+            expended.append(currState)
+            if currState.getAgentState(self.index).getPosition() == goalPos:
+                return path[0]
+            actions = currState.getLegalActions(self.index)
+            actions.remove(Directions.STOP)
+            for action in actions:
+                succState = currState.generateSuccessor(self.index, action)
+                if not succState in expended:
+                    expended.append(succState)
+                    queue.push((succState, path + [action]))
+        return []
+
+
+    def compareSuccDistToFood(self, gameState, nearestFood):
+        actions = gameState.getLegalActions(self.index)
+        actions.remove(Directions.STOP)
+        goodActions = []
+        fvalues = []
+        for action in actions:
+            succState = gameState.generateSuccessor(self.index, action)
+            succPos = succState.getAgentPosition(self.index)
+            goodActions.append(action)
+            fvalues.append(self.getMazeDistance(succPos, nearestFood))
+
+        # Randomly chooses between ties.
+        best = min(fvalues)
+        ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
+
+        # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
+        return random.choice(ties)[1]
+
+
+    def takeToEmptyAlley(self, gameState, action, depth):
+        """
+        Verify if an action takes the agent to an alley with
+        no pacdots.
+        """
+        if depth == 0:
+            return False
+        old_score = self.getScore(gameState)
+        new_state = gameState.generateSuccessor(self.index, action)
+        new_score = self.getScore(new_state)
+        if old_score < new_score:
+            return False
+        actions = new_state.getLegalActions(self.index)
+        actions.remove(Directions.STOP)
+        reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
+        if reversed_direction in actions:
+            actions.remove(reversed_direction)
+        if len(actions) == 0:
+            return True
+        for a in actions:
+            if not self.takeToEmptyAlley(new_state, a, depth - 1):
+                return False
+        return True
 
 class Attacker(EvaluationBasedAgent):
     "Gera Carlo, o agente ofensivo."
@@ -140,74 +306,6 @@ class Attacker(EvaluationBasedAgent):
         # Weights normally used
         return {'distanceToCapsule': -3, 'successorScore': 200, 'distanceToFood': -5, 'distanceToGhost': 220}
 
-    def getNearestGhost(self, gameState):
-        myPos = gameState.getAgentState(self.index).getPosition()
-        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        ghostsInRange = filter(lambda x: not x.isPacman and x.getPosition() is not None, ghostsAll)
-        if len(ghostsInRange) > 0:
-            return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
-        return None, None
-
-    def getNearestFood(self, gameState):
-        myPos = gameState.getAgentState(self.index).getPosition()
-        foods = self.getFood(gameState).asList()
-        if len(foods) > 0:
-            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
-        return None, None
-
-    def uctSimulation(self, depth, gameState):
-        """
-        SIMULATE and BACK UP STEP in Monte Carlo Search Tree:
-
-        Random simulate some actions for the agent. The actions other agents can take
-        are ignored, or, in other words, we consider their actions is always STOP.
-        The final state from the simulation is evaluated.
-
-        Should think how to implement algorithm.
-        return evaluateValue
-        """
-        new_state = gameState.deepCopy()
-        while depth > 0:
-            # Get valid actions
-            actions = new_state.getLegalActions(self.index)
-            # The agent should not stay put in the simulation
-            actions.remove(Directions.STOP)
-            # The agent should not use the reverse direction during simulation
-            reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
-            if reversed_direction in actions and len(actions) > 1:
-                actions.remove(reversed_direction)
-            # Randomly chooses a valid action
-            a = random.choice(actions)
-            # Compute new state and update depth
-            new_state = new_state.generateSuccessor(self.index, a)
-            depth -= 1
-        # Evaluate the final simulation state
-        return self.evaluate(new_state, Directions.STOP)
-
-    def takeToEmptyAlley(self, gameState, action, depth):
-        """
-        Verify if an action takes the agent to an alley with
-        no pacdots.
-        """
-        if depth == 0:
-            return False
-        old_score = self.getScore(gameState)
-        new_state = gameState.generateSuccessor(self.index, action)
-        new_score = self.getScore(new_state)
-        if old_score < new_score:
-            return False
-        actions = new_state.getLegalActions(self.index)
-        actions.remove(Directions.STOP)
-        reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
-        if reversed_direction in actions:
-            actions.remove(reversed_direction)
-        if len(actions) == 0:
-            return True
-        for a in actions:
-            if not self.takeToEmptyAlley(new_state, a, depth - 1):
-                return False
-        return True
-
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
         # Variables used to verify if the agent os locked
@@ -218,98 +316,6 @@ class Attacker(EvaluationBasedAgent):
     def registerInitialState(self, gameState):
         CaptureAgent.registerInitialState(self, gameState)
         self.distancer.getMazeDistances()
-
-    def pureEnvBFS(self, gameState, goalPos):
-        """
-        Called when otherAgentState.scaredTimer > 5 (goal is nearest food)
-         or otherAgent.isPacman in view && no mate around (goal is pacman):
-        Use A Star Algorithm to get the best next action to eat the nearest dot.
-        Using MazeDistance as heuristic value.
-        """
-        # ######################################
-        # try to solve with BFS
-        # ######################################
-        queue, expended, path = util.Queue(), [], []
-        queue.push((gameState, path))
-
-        while not queue.isEmpty():
-            currState, path = queue.pop()
-            expended.append(currState)
-            if currState.getAgentState(self.index).getPosition() == goalPos:
-                return path[0]
-            actions = currState.getLegalActions(self.index)
-            actions.remove(Directions.STOP)
-            for action in actions:
-                succState = currState.generateSuccessor(self.index, action)
-                if not succState in expended:
-                    expended.append(succState)
-                    queue.push((succState, path + [action]))
-        return []
-
-        # #######################################
-        # try to solve with A star, but no function queue.update in this version util file
-        # #######################################
-        # queue, expended, path = util.PriorityQueue(), [], []
-        # queue.push((myPos, []), 0.0)
-        #
-        # while not queue.isEmpty():
-        #     currPos, path = queue.pop()
-        #     if currPos is goalPos:
-        #         return path[0]
-        #     expended.append(currPos)
-        #     actions = gameState.getLegalActions(self.index)
-        #     for action in actions:
-        #         succPos = gameState.generateSuccessor(self.index, action).getAgentState(self.index).getPosition()
-        #         if succPos is goalPos or not succPos in expended:
-        #             expended.append(succPos)
-        #             queue.update((succPos, path + [action]),
-        #                          len(path + [action]) + self.getMazeDistance(succPos, goalPos))
-        # return []
-
-    def getRationalActions(self, gameState):
-        """
-        EXPAND Step in Monte Carlo Search Tree:
-
-        actions = gameState.getLegalActions(self.index)
-        aBooleanValue = takeToEmptyAlley(self, gameState, action, depth)
-        actions.remove(Directions.STOP and action lead pacman into a empty alley)
-        """
-
-        currentEnemyFood = len(self.getFood(gameState).asList())
-        if self.numEnemyFood != currentEnemyFood:
-            self.numEnemyFood = currentEnemyFood
-            self.inactiveTime = 0
-        else:
-            self.inactiveTime += 1
-        # If the agent dies, inactiveTime is reseted.
-        if gameState.getInitialAgentPosition(self.index) == gameState.getAgentState(self.index).getPosition():
-            self.inactiveTime = 0
-
-        # Get valid actions. Staying put is almost never a good choice, so
-        # the agent will ignore this action.
-        all_actions = gameState.getLegalActions(self.index)
-        all_actions.remove(Directions.STOP)
-        actions = []
-        for a in all_actions:
-            # if not self.takeToEmptyAlley(gameState, a, 5):
-            actions.append(a)
-        if len(actions) == 0:
-            actions = all_actions
-
-        fvalues = []
-        for a in actions:
-            new_state = gameState.generateSuccessor(self.index, a)
-            value = 0
-            for i in range(1, 31):
-                value += self.uctSimulation(10, new_state)
-            fvalues.append(value)
-
-        best = max(fvalues)
-        ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
-        toPlay = random.choice(ties)[1]
-
-        # print 'eval time for offensive agent %d: %.4f' % (self.index, time.time() - start)
-        return toPlay
 
     def chooseAction(self, gameState):
         """
@@ -330,25 +336,30 @@ class Attacker(EvaluationBasedAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
         nextAction = random.choice(ties)[1]
         """
-        myNearestGhostDist, nearestGhost = self.getNearestGhost(gameState)
+        myGhostDist, nearestGhost = self.getNearestGhost(gameState)
+        capsuleDist, nearestCapsule = self.getNearestCapsule(gameState)
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
         if nearestGhost is not None and nearestGhost.isPacman:
-            print "Classical planning."
-            mateNearestGhostDist = min(self.getMazeDistance(
-                nearestGhost.getPosition(),gameState.getAgentState(mate).getPosition()) for mate in mates)
-            if mateNearestGhostDist > myNearestGhostDist:
-                print "Help Mate!"
+            mateGhostDist = min(self.getMazeDistance(
+                nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
+            if mateGhostDist > myGhostDist:
+                # print "Help Mate!"
+                print "BFS"
                 return self.pureEnvBFS(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
-            print "Classical planning."
             if gameState.getAgentState(self.index).numCarrying < 5:
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
-                return self.pureEnvBFS(gameState, nearestFood)
+                print "Compare Distance"
+                return self.compareSuccDistToFood(gameState, nearestFood)
 
-        print "UCT Planning."
+        if nearestGhost is not None and nearestCapsule is not None and capsuleDist < myGhostDist:
+            print "Capsule"
+            return self.compareSuccDistToFood(gameState, nearestCapsule)
+
+        print "UCT"
         return self.getRationalActions(gameState)
 
 class Defender(CaptureAgent):
