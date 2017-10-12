@@ -83,7 +83,7 @@ class EvaluationBasedAgent(CaptureAgent):
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
         ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        ghostsInRange = filter(lambda x: x.getPosition() is not None, ghostsAll)
+        ghostsInRange = [ghost for ghost in ghostsAll if ghost.getPosition() is not None]
         if len(ghostsInRange) > 0:
             return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
         return None, None
@@ -198,10 +198,7 @@ class EvaluationBasedAgent(CaptureAgent):
                     queue.push((succState, path + [action]))
         return []
 
-    def getEatAction(self, gameState, goalPos):
-        """
-        Greedy eat nearest food or capsule.
-        """
+    def getEatAction(self, gameState, nearestFood):
         actions = gameState.getLegalActions(self.index)
         actions.remove(Directions.STOP)
         goodActions = []
@@ -210,11 +207,11 @@ class EvaluationBasedAgent(CaptureAgent):
             succState = gameState.generateSuccessor(self.index, action)
             succPos = succState.getAgentPosition(self.index)
             goodActions.append(action)
-            fvalues.append(self.getMazeDistance(succPos, goalPos))
+            fvalues.append(self.getMazeDistance(succPos, nearestFood))
 
         # Randomly chooses between ties.
         best = min(fvalues)
-        ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
+        ties = [combine for combine in zip(fvalues, goodActions) if combine[0] == best]
 
         return random.choice(ties)[1]
 
