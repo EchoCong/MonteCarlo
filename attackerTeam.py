@@ -1,3 +1,4 @@
+from __future__ import division
 from captureAgents import CaptureAgent
 from captureAgents import AgentFactory
 from game import Directions
@@ -6,14 +7,13 @@ import distanceCalculator
 import sys
 sys.path.append('teams/<your team>/')
 
-
 import random, time, util
 import datetime
 from random import choice
 from math import log, sqrt
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first='Attacker', second='Defender'):
+               first='Attacker', second='Attacker'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -60,6 +60,7 @@ class MonteCarloFactory(AgentFactory):
 ###############################################
 
 class EvaluationBasedAgent(CaptureAgent):
+    # Implemente este metodo para pre-processamento (15s max).
 
 
     def getSuccessor(self, gameState, action):
@@ -97,8 +98,14 @@ class EvaluationBasedAgent(CaptureAgent):
 
     def getBFSAction(self, gameState, goalPos):
         """
-        BFS eat pacman.
+        Called when otherAgentState.scaredTimer > 5 (goal is nearest food)
+         or otherAgent.isPacman in view && no mate around (goal is pacman):
+        Use A Star Algorithm to get the best next action to eat the nearest dot.
+        Using MazeDistance as heuristic value.
         """
+        # ######################################
+        # try to solve with BFS
+        # ######################################
         queue, expended, path = util.Queue(), [], []
         queue.push((gameState, path))
 
@@ -116,10 +123,7 @@ class EvaluationBasedAgent(CaptureAgent):
                     queue.push((succState, path + [action]))
         return []
 
-    def getEatAction(self, gameState, goalPos):
-        """
-        Greedy eat nearest food or capsule.
-        """
+    def getEatAction(self, gameState, nearestFood):
         actions = gameState.getLegalActions(self.index)
         actions.remove(Directions.STOP)
         goodActions = []
@@ -128,18 +132,18 @@ class EvaluationBasedAgent(CaptureAgent):
             succState = gameState.generateSuccessor(self.index, action)
             succPos = succState.getAgentPosition(self.index)
             goodActions.append(action)
-            fvalues.append(self.getMazeDistance(succPos, goalPos))
+            fvalues.append(self.getMazeDistance(succPos, nearestFood))
 
         # Randomly chooses between ties.
         best = min(fvalues)
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
 
+        # # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
         return random.choice(ties)[1]
 
 class Attacker(EvaluationBasedAgent):
-    """
-    Attacker agent.
-    """
+    "Gera Carlo, o agente ofensivo."
+
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
         # Variables used to verify if the agent os locked
@@ -155,7 +159,12 @@ class Attacker(EvaluationBasedAgent):
         """
         UCT algorithm to choose which action is more rational.
         """
+
         action, percent_wins = MCTSNode(gameState, self.index).get_play()
+
+        '''
+        You should change this in your own agent.
+        '''
 
         legal = gameState.getLegalActions(self.index)
         legal.remove('Stop')
@@ -200,7 +209,6 @@ class Attacker(EvaluationBasedAgent):
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
-        # BFS: eat pacman
         if nearestGhost is not None and nearestGhost.isPacman:
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
@@ -208,27 +216,22 @@ class Attacker(EvaluationBasedAgent):
                 print "Help Mate!"
                 return self.getBFSAction(gameState, nearestGhost.getPosition())
 
-        # Greedy: eat food
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
             if gameState.getAgentState(self.index).numCarrying < 5:
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
                 print "Compare Distance"
                 return self.getEatAction(gameState, nearestFood)
 
-        # Greedy: eat capsule
         if nearestGhost is not None and not nearestGhost.isPacman and \
                         nearestCapsule is not None and capsuleDist + 3 < myGhostDist:
             print "Capsule"
             return self.getEatAction(gameState, nearestCapsule)
 
-        # UCT: trade off situation
         print "UCT"
         return self.getUCTActions(gameState)
 
 class Defender(EvaluationBasedAgent):
-    """
-    Defender agent.
-    """
+    "Gera Monte, o agente defensivo."
 
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
@@ -361,9 +364,10 @@ class Defender(EvaluationBasedAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
 
         # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
+
         return random.choice(ties)[1]
 
-class MCTSNode:
+class MCTSNode():
   """
   build the MCTS tree
   """
@@ -610,6 +614,7 @@ class MCTSNode:
           break
 
       """""
+
       if nstate.getAgentState(self.index).numCarrying - state.getAgentState(self.index).numCarrying > 0 and len(nghost) == 0:
           # record number of wins
           for s in states_path:

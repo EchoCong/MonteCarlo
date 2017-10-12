@@ -1,7 +1,7 @@
 from captureAgents import CaptureAgent
 from captureAgents import AgentFactory
 from game import Directions
-import random, time, util
+import random, util
 from util import nearestPoint
 
 def createTeam(firstIndex, secondIndex, isRed,
@@ -80,7 +80,29 @@ class EvaluationBasedAgent(CaptureAgent):
     def getWeights(self, gameState, action):
         return {'successorScore': 1.0}
 
-    def getRationalActions(self, gameState):
+    def getNearestGhost(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+        ghostsInRange = filter(lambda x: x.getPosition() is not None, ghostsAll)
+        if len(ghostsInRange) > 0:
+            return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
+        return None, None
+
+    def getNearestFood(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        foods = self.getFood(gameState).asList()
+        if len(foods) > 0:
+            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
+        return None, None
+
+    def getNearestCapsule(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        capsules = self.getCapsules(gameState)
+        if len(capsules) > 0:
+            return min([(self.getMazeDistance(myPos, cap), cap) for cap in capsules])
+        return None, None
+
+    def getMCSTAction(self, gameState):
         """
         EXPAND Step in Monte Carlo Search Tree:
 
@@ -105,8 +127,8 @@ class EvaluationBasedAgent(CaptureAgent):
         all_actions.remove(Directions.STOP)
         actions = []
         for a in all_actions:
-            # if not self.takeToEmptyAlley(gameState, a, 5):
-            actions.append(a)
+            if not self.takeToEmptyAlley(gameState, a, 5):
+                actions.append(a)
         if len(actions) == 0:
             actions = all_actions
 
@@ -115,7 +137,7 @@ class EvaluationBasedAgent(CaptureAgent):
             new_state = gameState.generateSuccessor(self.index, a)
             value = 0
             for i in range(1, 31):
-                value += self.uctSimulation(10, new_state)
+                value += self.mcstSimulation(10, new_state)
             fvalues.append(value)
 
         best = max(fvalues)
@@ -125,29 +147,8 @@ class EvaluationBasedAgent(CaptureAgent):
         # print 'eval time for offensive agent %d: %.4f' % (self.index, time.time() - start)
         return toPlay
 
-    def getNearestGhost(self, gameState):
-        myPos = gameState.getAgentState(self.index).getPosition()
-        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        ghostsInRange = filter(lambda x: not x.isPacman and x.getPosition() is not None, ghostsAll)
-        if len(ghostsInRange) > 0:
-            return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
-        return None, None
 
-    def getNearestFood(self, gameState):
-        myPos = gameState.getAgentState(self.index).getPosition()
-        foods = self.getFood(gameState).asList()
-        if len(foods) > 0:
-            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
-        return None, None
-
-    def getNearestCapsule(self, gameState):
-        myPos = gameState.getAgentState(self.index).getPosition()
-        capsules = self.getCapsules(gameState)
-        if len(capsules) > 0:
-            return min([(self.getMazeDistance(myPos, cap), cap) for cap in capsules])
-        return None, None
-
-    def uctSimulation(self, depth, gameState):
+    def mcstSimulation(self, depth, gameState):
         """
         SIMULATE and BACK UP STEP in Monte Carlo Search Tree:
 
@@ -176,16 +177,10 @@ class EvaluationBasedAgent(CaptureAgent):
         # Evaluate the final simulation state
         return self.evaluate(new_state, Directions.STOP)
 
-    def pureEnvBFS(self, gameState, goalPos):
+    def getBFSAction(self, gameState, goalPos):
         """
-        Called when otherAgentState.scaredTimer > 5 (goal is nearest food)
-         or otherAgent.isPacman in view && no mate around (goal is pacman):
-        Use A Star Algorithm to get the best next action to eat the nearest dot.
-        Using MazeDistance as heuristic value.
+        BFS eat pacman.
         """
-        # ######################################
-        # try to solve with BFS
-        # ######################################
         queue, expended, path = util.Queue(), [], []
         queue.push((gameState, path))
 
@@ -203,8 +198,10 @@ class EvaluationBasedAgent(CaptureAgent):
                     queue.push((succState, path + [action]))
         return []
 
-
-    def compareSuccDistToFood(self, gameState, nearestFood):
+    def getEatAction(self, gameState, goalPos):
+        """
+        Greedy eat nearest food or capsule.
+        """
         actions = gameState.getLegalActions(self.index)
         actions.remove(Directions.STOP)
         goodActions = []
@@ -213,13 +210,12 @@ class EvaluationBasedAgent(CaptureAgent):
             succState = gameState.generateSuccessor(self.index, action)
             succPos = succState.getAgentPosition(self.index)
             goodActions.append(action)
-            fvalues.append(self.getMazeDistance(succPos, nearestFood))
+            fvalues.append(self.getMazeDistance(succPos, goalPos))
 
         # Randomly chooses between ties.
         best = min(fvalues)
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
 
-        # # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
         return random.choice(ties)[1]
 
 
@@ -300,9 +296,6 @@ class Attacker(EvaluationBasedAgent):
                 c. eat foods (Distance to food)
                 d. capsule (Distance to Capsule = 0)
         """
-        # #########################
-        # Now our pacman will eat all capsules first, waste of capsules.
-        # #########################
         # Weights normally used
         return {'distanceToCapsule': -3, 'successorScore': 200, 'distanceToFood': -5, 'distanceToGhost': 220}
 
@@ -345,24 +338,24 @@ class Attacker(EvaluationBasedAgent):
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateGhostDist > myGhostDist:
-                # print "Help Mate!"
-                print "BFS"
-                return self.pureEnvBFS(gameState, nearestGhost.getPosition())
+                print "Help Mate!"
+                return self.getBFSAction(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
             if gameState.getAgentState(self.index).numCarrying < 5:
                 nearestFoodDist, nearestFood = self.getNearestFood(gameState)
                 print "Compare Distance"
-                return self.compareSuccDistToFood(gameState, nearestFood)
+                return self.getEatAction(gameState, nearestFood)
 
-        if nearestGhost is not None and nearestCapsule is not None and capsuleDist < myGhostDist:
+        if nearestGhost is not None and not nearestGhost.isPacman and \
+                        nearestCapsule is not None and capsuleDist + 3 < myGhostDist:
             print "Capsule"
-            return self.compareSuccDistToFood(gameState, nearestCapsule)
+            return self.getEatAction(gameState, nearestCapsule)
 
         print "UCT"
-        return self.getRationalActions(gameState)
+        return self.getUCTActions(gameState)
 
-class Defender(CaptureAgent):
+class Defender(EvaluationBasedAgent):
     "Gera Monte, o agente defensivo."
 
     def __init__(self, index):
@@ -444,6 +437,7 @@ class Defender(CaptureAgent):
 
         # If some of our food was eaten, we need to update
         # our patrol points probabilities.
+
         if self.lastObservedFood and len(self.lastObservedFood) != len(self.getFoodYouAreDefending(gameState).asList()):
             self.distFoodToPatrol(gameState)
 
@@ -452,7 +446,6 @@ class Defender(CaptureAgent):
             self.target = None
 
         # If we can see an invader, we go after him.
-        x = self.getOpponents(gameState)
         enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
         invaders = filter(lambda x: x.isPacman and x.getPosition() != None, enemies)
         if len(invaders) > 0:
@@ -496,4 +489,8 @@ class Defender(CaptureAgent):
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
 
         # print 'eval time for defender agent %d: %.4f' % (self.index, time.time() - start)
+
+
+
         return random.choice(ties)[1]
+
