@@ -37,6 +37,7 @@ class EvaluationBasedAgent(CaptureAgent):
     # Implemente este metodo para pre-processamento (15s max).
 
     def registerInitialState(self, gameState):
+        print gameState.data.layout
         CaptureAgent.registerInitialState(self, gameState)
         self.distancer.getMazeDistances()
         self.start = gameState.getAgentPosition(self.index)
@@ -84,9 +85,12 @@ class EvaluationBasedAgent(CaptureAgent):
     def getNearestFood(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
         foods = self.getFood(gameState).asList()
+
+        nearFoodsNum = max(len([food for food in foods if self.getMazeDistance(food, myPos) <= 5]), 0)
+
         if len(foods) > 0:
-            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
-        return None, None
+            return min([(self.getMazeDistance(myPos, food), food, nearFoodsNum) for food in foods])
+        return None, None, nearFoodsNum
 
     def getNearestCapsule(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -198,10 +202,9 @@ class Attacker(EvaluationBasedAgent):
         3. When current agent is 2 step nearer to capsule than nearest enemy, eat capsule.
         4. Other situation, use UCT algorithm to trade off.
         """
-        print
         myGhostDist, nearestGhost = self.getNearestGhost(gameState)
         capsuleDist, nearestCapsule = self.getNearestCapsule(gameState)
-        nearestFoodDist, nearestFood = self.getNearestFood(gameState)
+        nearestFoodDist, nearestFood, nearFoodsNum = self.getNearestFood(gameState)
 
         mates = self.getTeam(gameState)
         mates.remove(self.index)
@@ -220,8 +223,19 @@ class Attacker(EvaluationBasedAgent):
                 # print ""
                 return self.getBFSAction(gameState, nearestGhost.getPosition())
 
-        if nearestGhost is None or nearestGhost.scaredTimer > 5:
-            if gameState.getAgentState(self.index).numCarrying < 5 and nearestFood is not None:
+        """
+        In these situation, pacman can greedy eat foods:
+            1)there are no ghosts around OR 
+            2)observed ghost is 8 maze steps away from our pacman OR
+            3)nearest ghost scared time more than 5
+        But carrying too many foods is dangerous, so limit food carrying:
+            1)there are more than 5 dots within maze distance 5 and carrying less than 15 dots OR
+            2)carry dots less than 5
+            
+        """
+        if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 8) or nearestGhost.scaredTimer > 5:
+            if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15)\
+                    or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
                 # print self.index, " Compare Distance"
                 # print ""
                 return self.getEatAction(gameState, nearestFood)
@@ -500,7 +514,7 @@ class MCTSNode:
     visited_states.add(state)
     states_path = [state]
 
-    enemies = [state.getAgentState(i) for i in self.enemies]
+    enemies = [state.getAgentState(i) for i in self.enemies if state.getAgentState(i).scaredTimer < 6]
     ghost = [a for a in enemies if a.getPosition() != None and not a.isPacman]
     invaders = [a for a in enemies if a.isPacman]
 
