@@ -1,16 +1,14 @@
-# from __future__ import division
 from captureAgents import CaptureAgent
-from captureAgents import AgentFactory
 from game import Directions
 from util import nearestPoint
 import distanceCalculator
-import sys
-sys.path.append('teams/<your team>/')
-
 import random, util
 import datetime
 from random import choice
 from math import log, sqrt
+
+import sys
+sys.path.append('teams/<your team>/')
 
 def createTeam(firstIndex, secondIndex, isRed,
                first='Attacker', second='Defender'):
@@ -29,36 +27,19 @@ def createTeam(firstIndex, secondIndex, isRed,
     behavior is what you want for the nightly contest.
     """
     return [eval(first)(firstIndex), eval(second)(secondIndex)]
-#############
-# FACTORIES #
-###############################################
-# Instanciam os agentes no inicio da partida. #
-# Devem estender a classe base AgentFactory.  #
-###############################################
 
-class MonteCarloFactory(AgentFactory):
-    "Gera um time MonteCarloTeam"
-
-    def __init__(self, isRed):
-        AgentFactory.__init__(self, isRed)
-        self.agentList = ['attacker', 'defender']
-
-    def getAgent(self, index):
-        if len(self.agentList) > 0:
-            agent = self.agentList.pop(0)
-            if agent == 'attacker':
-                return Attacker(index)
-        return Defender(index)
-
-# AGENTS   #
-###############################################
-# Implementacoes dos agentes.                 #
-# Devem estender a classe base CaptureAgent.  #
-###############################################
+#########################################################
+#  Evaluation Based CaptureAgent.                       #
+#  Provide functions used by both attacker and defender #
+#########################################################
 
 class EvaluationBasedAgent(CaptureAgent):
     # Implemente este metodo para pre-processamento (15s max).
 
+    def registerInitialState(self, gameState):
+        CaptureAgent.registerInitialState(self, gameState)
+        self.distancer.getMazeDistances()
+        self.start = gameState.getAgentPosition(self.index)
 
     def getSuccessor(self, gameState, action):
         """
@@ -73,30 +54,30 @@ class EvaluationBasedAgent(CaptureAgent):
 
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
-        print "MY POSITION", myPos
-        print "MY POSITION", myPos
-        ghostsAll = [(gameState.getAgentState(i),i) for i in self.getOpponents(gameState)]
-        print "ALL GHOST NUM ", len(ghostsAll)
-        for ghost in ghostsAll:
-            print "GHOST IN GHOSTALL",ghost[0].getPosition()," ", ghost[1]
+        # print "MY POSITION", myPos
+        # print "MY POSITION", myPos
+        ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+        # print "ALL GHOST NUM ", len(ghostsAll)
+        # for ghost in ghostsAll:
+            # print "GHOST IN GHOSTALL",ghost[0].getPosition()," ", ghost[1]
 
         ghostsInRange = [ghost for ghost in ghostsAll if
-                         ghost[0].getPosition() is not None and
-                         util.manhattanDistance(myPos,ghost[0].getPosition())<=5]
-        for ghost in ghostsInRange:
-            print "GHOST IN RANGE", ghost[0].getPosition()," ", ghost[1]
-        print "VIEW GHOST NUM ", len(ghostsInRange)
+                         ghost.getPosition() is not None and
+                         util.manhattanDistance(myPos,ghost.getPosition())<=5]
+        # for ghost in ghostsInRange:
+            # print "GHOST IN RANGE", ghost[0].getPosition()," ", ghost[1]
+        # print "VIEW GHOST NUM ", len(ghostsInRange)
 
         if len(ghostsInRange) > 0:
-            Pos, state = min([(self.getMazeDistance(myPos, ghost[0].getPosition()), ghost) for ghost in ghostsInRange])
-            print "GHOST INDEX", state[1], state[0].getPosition()
-            print "GHOST INDEX", state[1], state[0].getPosition()
-            print "GHOST INDEX", state[1], state[0].getPosition()
-            print "MAZE DISTANCE", self.getMazeDistance(myPos, state[0].getPosition())
-            print "MANH DISTANCE", util.manhattanDistance(myPos, state[0].getPosition())
+            # Pos, state = min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
+            # print "GHOST INDEX", state[1], state[0].getPosition()
+            # print "GHOST INDEX", state[1], state[0].getPosition()
+            # print "GHOST INDEX", state[1], state[0].getPosition()
+            # print "MAZE DISTANCE", self.getMazeDistance(myPos, state[0].getPosition())
+            # print "MANH DISTANCE", util.manhattanDistance(myPos, state[0].getPosition())
 
-            return min([(self.getMazeDistance(myPos, ghost[0].getPosition()), ghost[0]) for ghost in ghostsInRange])
-        print "NO NEAREST GHOST!"
+            return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
+        # print "NO NEAREST GHOST!"
 
         return None, None
 
@@ -198,19 +179,15 @@ class EvaluationBasedAgent(CaptureAgent):
 
 
 class Attacker(EvaluationBasedAgent):
-    "Gera Carlo, o agente ofensivo."
+    """
+    Monte Carlo, agent offensive.
+    """
 
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
-        # Variables used to verify if the agent os locked
+        # Variables used to verify if the agent is locked
         self.numEnemyFood = "+inf"
         self.inactiveTime = 0
-
-    def registerInitialState(self, gameState):
-        CaptureAgent.registerInitialState(self, gameState)
-        self.distancer.getMazeDistances()
-        self.start = gameState.getAgentPosition(self.index)
-
 
 
     def chooseAction(self, gameState):
@@ -221,6 +198,7 @@ class Attacker(EvaluationBasedAgent):
         3. When current agent is 2 step nearer to capsule than nearest enemy, eat capsule.
         4. Other situation, use UCT algorithm to trade off.
         """
+        print
         myGhostDist, nearestGhost = self.getNearestGhost(gameState)
         capsuleDist, nearestCapsule = self.getNearestCapsule(gameState)
         nearestFoodDist, nearestFood = self.getNearestFood(gameState)
@@ -228,9 +206,8 @@ class Attacker(EvaluationBasedAgent):
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
-        print "CARRYING POTS", gameState.getAgentState(self.index).numCarrying
-        print ""
-
+        # print "CARRYING POTS", gameState.getAgentState(self.index).numCarrying
+        # print ""
 
         if len(self.getFood(gameState).asList()) <=2:
             return self.getUCTActions(gameState)
@@ -239,30 +216,31 @@ class Attacker(EvaluationBasedAgent):
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateGhostDist > myGhostDist:
-                print self.index," Help Mate!"
-                print ""
+                # print self.index," Help Mate!"
+                # print ""
                 return self.getBFSAction(gameState, nearestGhost.getPosition())
 
         if nearestGhost is None or nearestGhost.scaredTimer > 5:
             if gameState.getAgentState(self.index).numCarrying < 5 and nearestFood is not None:
-                print self.index, " Compare Distance"
-                print ""
+                # print self.index, " Compare Distance"
+                # print ""
                 return self.getEatAction(gameState, nearestFood)
 
         if nearestGhost is not None and not nearestGhost.isPacman and \
                         nearestCapsule is not None and capsuleDist + 3 < myGhostDist:
-            print self.index, " Capsule"
-            print ""
+            # print self.index, " Capsule"
+            # print ""
 
             return self.getEatAction(gameState, nearestCapsule)
 
-        print self.index, " UCT"
-        print ""
+        # print self.index, " UCT"
+        # print ""
         return self.getUCTActions(gameState)
 
 class Defender(EvaluationBasedAgent):
-    "Gera Monte, o agente defensivo."
-
+    """
+    Monte Carlo, agent defensive."
+    """
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
         self.target = None
@@ -395,7 +373,7 @@ class Defender(EvaluationBasedAgent):
 
         return random.choice(ties)[1]
 
-class MCTSNode():
+class MCTSNode:
   """
   build the MCTS tree
   """
@@ -438,29 +416,27 @@ class MCTSNode():
   def update(self, state):
     self.states.append(state)
 
-  def takeToEmptyAlley(self, gameState, action, depth):
-      """
-      Verify if an action takes the agent to an alley with
-      no pacdots.
-      """
-      if depth == 0:
-          return False
-      old_score = gameState.getScore()
-      new_state = gameState.generateSuccessor(self.index, action)
-      new_score = new_state.getScore()
-      if old_score < new_score:
-          return False
-      actions = new_state.getLegalActions(self.index)
-      actions.remove(Directions.STOP)
-      reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
-      if reversed_direction in actions:
-          actions.remove(reversed_direction)
-      if len(actions) == 0:
-          return True
-      for a in actions:
-          if not self.takeToEmptyAlley(new_state, a, depth - 1):
-              return False
-      return True
+  # def takeToEmptyAlley(self, gameState, action, depth):
+  #     """
+  #     Verify if an action takes the agent to an alley with
+  #     no pacdots.
+  #     """
+  #     old_score = gameState.getScore()
+  #     new_state = gameState.generateSuccessor(self.index, action)
+  #     new_score = new_state.getScore()
+  #     if old_score < new_score or depth == 0:
+  #         return False
+  #     actions = new_state.getLegalActions(self.index)
+  #     actions.remove(Directions.STOP)
+  #     reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
+  #     if reversed_direction in actions:
+  #         actions.remove(reversed_direction)
+  #     if len(actions) == 0:
+  #         return True
+  #     for a in actions:
+  #         if not self.takeToEmptyAlley(new_state, a, depth - 1):
+  #             return False
+  #     return True
 
   def get_play(self):
     # Causes the AI to calculate the best move from the
@@ -470,23 +446,22 @@ class MCTSNode():
     legal = state.getLegalActions(self.index)
     legal.remove('Stop')
 
-    for action in legal:
-        if self.takeToEmptyAlley(self.gameState, action, 10):
-            legal.remove(action)
-
+    # for action in legal:
+    #     if self.takeToEmptyAlley(self.gameState, action, 10):
+    #         legal.remove(action)
 
     # Bail out early if there is no real choice to be made.
     if not legal:
-      return
+        return
     if len(legal) == 1:
-      return legal[0], 0.0
+        return legal[0], 0.0
 
     games = 0
 
     begin = datetime.datetime.utcnow()
     while datetime.datetime.utcnow() - begin < self.calculate_time:
-      self.run_simulation()
-      games += 1
+        self.run_simulation()
+        games += 1
     # print "SIMULATION NUMBER: ", games
 
     moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal]
