@@ -83,17 +83,25 @@ class EvaluationBasedAgent(CaptureAgent):
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
         ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        ghostsInRange = [ghost for ghost in ghostsAll if ghost.getPosition() is not None]
+
+        ghostsInRange = [ghost for ghost in ghostsAll if
+                         ghost.getPosition() is not None and
+                         util.manhattanDistance(myPos,ghost.getPosition())<=5]
         if len(ghostsInRange) > 0:
             return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
+        # print "NO NEAREST GHOST!"
+
         return None, None
 
     def getNearestFood(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
         foods = self.getFood(gameState).asList()
+
+        nearFoodsNum = max(len([food for food in foods if self.getMazeDistance(food, myPos) <= 5]), 0)
+
         if len(foods) > 0:
-            return min([(self.getMazeDistance(myPos, food), food) for food in foods])
-        return None, None
+            return min([(self.getMazeDistance(myPos, food), food, nearFoodsNum) for food in foods])
+        return None, None, None
 
     def getNearestCapsule(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -266,11 +274,11 @@ class Attacker(EvaluationBasedAgent):
             features["distanceToCapsule"] = nearestCapsuleDist
 
         # Compute distance to the nearest food
-        nearestFoodDist, nearestFood = self.getNearestFood(successor)
+        nearestFoodDist, nearestFood, nearestFoodNum = self.getNearestFood(successor)
         if nearestFood is not None:
             features['distanceToFood'] = nearestFoodDist
 
-        # Compute distance to closest ghost
+        # Compute distance to closest ghosts
         nearestGhostDist, nearestGhost = self.getNearestGhost(successor)
         if nearestGhostDist is not None and nearestGhostDist <= 5:
             features['distanceToGhost'] = nearestGhostDist
@@ -309,48 +317,60 @@ class Attacker(EvaluationBasedAgent):
 
     def chooseAction(self, gameState):
         """
-        SELECT STEP in Monte Carlo Search Tree:
-
-        if(otherAgent.isPacman in view && no mate around):
-            chasing enemy: distance to otherAgent.isPacman.
-            return nextAction = classical planning action to enemy?
-
-        if(otherAgentState.scaredTimer > 5):
-            Classical planing eating food
-            retur nextAction = classical planning action to foods. // but avoid eating other capsules!
-
-        actions = getRationalActions(): no STOP, no action to EMPTY ALLEY.
-        for action in actions:
-            values.append(UCTSimulation(action))
-        bestAction = max(values)
-        ties = filter(lambda x: x[0] == best, zip(fvalues, actions))
-        nextAction = random.choice(ties)[1]
+        Strategy:
+        1. In our domain, if there is a pacman in view and teammate not around, chase enemy.
+        2. If there is no enemy around or enemy is scared, greed eat food util carrying over five dots.
+        3. When current agent is 2 step nearer to capsule than nearest enemy, eat capsule.
+        4. Other situation, use UCT algorithm to trade off.
         """
         myGhostDist, nearestGhost = self.getNearestGhost(gameState)
         capsuleDist, nearestCapsule = self.getNearestCapsule(gameState)
+        nearestFoodDist, nearestFood, nearFoodsNum = self.getNearestFood(gameState)
+
         mates = self.getTeam(gameState)
         mates.remove(self.index)
+
+        # print "CARRYING POTS", gameState.getAgentState(self.index).numCarrying
+        # print ""
+
+        if len(self.getFood(gameState).asList()) <=2:
+            return self.getMCSTAction(gameState)
 
         if nearestGhost is not None and nearestGhost.isPacman:
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateGhostDist > myGhostDist:
-                print "Help Mate!"
+                # print self.index," Help Mate!"
+                # print ""
                 return self.getBFSAction(gameState, nearestGhost.getPosition())
 
-        if nearestGhost is None or nearestGhost.scaredTimer > 5:
-            if gameState.getAgentState(self.index).numCarrying < 5:
-                nearestFoodDist, nearestFood = self.getNearestFood(gameState)
-                print "Compare Distance"
+        """
+        In these situation, pacman can greedy eat foods:
+            1)there are no ghosts around OR 
+            2)observed ghost is 6 maze steps away from our pacman OR
+            3)nearest ghost scared time more than 5
+        But carrying too many foods is dangerous, so limit food carrying:
+            1)there are more than 5 dots within maze distance 5 and carrying less than 15 dots OR
+            2)carry dots less than 5
+            
+        """
+        if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 6) or nearestGhost.scaredTimer > 5:
+            if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15)\
+                    or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
+                # print self.index, " Compare Distance"
+                # print ""
                 return self.getEatAction(gameState, nearestFood)
 
         if nearestGhost is not None and not nearestGhost.isPacman and \
                         nearestCapsule is not None and capsuleDist + 3 < myGhostDist:
-            print "Capsule"
+            # print self.index, " Capsule"
+            # print ""
+
             return self.getEatAction(gameState, nearestCapsule)
 
-        print "UCT"
-        return self.getUCTActions(gameState)
+        # print self.index, " UCT"
+        # print ""
+        return self.getMCSTAction(gameState)
 
 class Defender(EvaluationBasedAgent):
     "Gera Monte, o agente defensivo."

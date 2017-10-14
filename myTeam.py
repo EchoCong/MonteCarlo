@@ -8,7 +8,9 @@ from random import choice
 from math import log, sqrt
 
 import sys
+
 sys.path.append('teams/<your team>/')
+
 
 def createTeam(firstIndex, secondIndex, isRed,
                first='Attacker', second='Defender'):
@@ -27,6 +29,7 @@ def createTeam(firstIndex, secondIndex, isRed,
     behavior is what you want for the nightly contest.
     """
     return [eval(first)(firstIndex), eval(second)(secondIndex)]
+
 
 #########################################################
 #  Evaluation Based CaptureAgent.                       #
@@ -60,13 +63,13 @@ class EvaluationBasedAgent(CaptureAgent):
         ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
         # print "ALL GHOST NUM ", len(ghostsAll)
         # for ghost in ghostsAll:
-            # print "GHOST IN GHOSTALL",ghost[0].getPosition()," ", ghost[1]
+        # print "GHOST IN GHOSTALL",ghost[0].getPosition()," ", ghost[1]
 
         ghostsInRange = [ghost for ghost in ghostsAll if
                          ghost.getPosition() is not None and
-                         util.manhattanDistance(myPos,ghost.getPosition())<=5]
+                         util.manhattanDistance(myPos, ghost.getPosition()) <= 5]
         # for ghost in ghostsInRange:
-            # print "GHOST IN RANGE", ghost[0].getPosition()," ", ghost[1]
+        # print "GHOST IN RANGE", ghost[0].getPosition()," ", ghost[1]
         # print "VIEW GHOST NUM ", len(ghostsInRange)
 
         if len(ghostsInRange) > 0:
@@ -90,7 +93,7 @@ class EvaluationBasedAgent(CaptureAgent):
 
         if len(foods) > 0:
             return min([(self.getMazeDistance(myPos, food), food, nearFoodsNum) for food in foods])
-        return None, None, nearFoodsNum
+        return None, None, None
 
     def getNearestCapsule(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -193,7 +196,6 @@ class Attacker(EvaluationBasedAgent):
         self.numEnemyFood = "+inf"
         self.inactiveTime = 0
 
-
     def chooseAction(self, gameState):
         """
         Strategy:
@@ -212,7 +214,7 @@ class Attacker(EvaluationBasedAgent):
         # print "CARRYING POTS", gameState.getAgentState(self.index).numCarrying
         # print ""
 
-        if len(self.getFood(gameState).asList()) <=2:
+        if len(self.getFood(gameState).asList()) <= 2:
             return self.getUCTActions(gameState)
 
         if nearestGhost is not None and nearestGhost.isPacman:
@@ -226,15 +228,15 @@ class Attacker(EvaluationBasedAgent):
         """
         In these situation, pacman can greedy eat foods:
             1)there are no ghosts around OR 
-            2)observed ghost is 8 maze steps away from our pacman OR
+            2)observed ghost is 6 maze steps away from our pacman OR
             3)nearest ghost scared time more than 5
         But carrying too many foods is dangerous, so limit food carrying:
             1)there are more than 5 dots within maze distance 5 and carrying less than 15 dots OR
             2)carry dots less than 5
             
         """
-        if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 8) or nearestGhost.scaredTimer > 5:
-            if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15)\
+        if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 6) or nearestGhost.scaredTimer > 5:
+            if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15) \
                     or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
                 # print self.index, " Compare Distance"
                 # print ""
@@ -251,10 +253,12 @@ class Attacker(EvaluationBasedAgent):
         # print ""
         return self.getUCTActions(gameState)
 
+
 class Defender(EvaluationBasedAgent):
     """
     Monte Carlo, agent defensive."
     """
+
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
         self.target = None
@@ -387,263 +391,267 @@ class Defender(EvaluationBasedAgent):
 
         return random.choice(ties)[1]
 
+
 class MCTSNode:
-  """
-  build the MCTS tree
-  """
-  def __init__(self, game_state, player_index, **kwargs):
-
-    #define the time allowed for simulation
-    seconds = kwargs.get('time', 1)
-    self.calculate_time = datetime.timedelta(seconds=seconds)
-
-    self.max_moves = kwargs.get('max_moves', 20)
-    self.states = [game_state]
-    self.index = player_index
-    self.wins = util.Counter()
-    self.plays = util.Counter()
-    self.C = kwargs.get('C', 1)
-    self.distancer = distanceCalculator.Distancer(game_state.data.layout)
-    self.distancer.getMazeDistances()
-    self.gameState = game_state
-
-    if game_state.isOnRedTeam(self.index):
-        self.enemies = game_state.getBlueTeamIndices()
-        self.foodlist = game_state.getBlueFood()
-        self.capsule = game_state.getBlueCapsules()
-    else:
-        self.enemies = game_state.getRedTeamIndices()
-        self.foodlist = game_state.getRedFood()
-        self.capsule = game_state.getRedCapsules()
-
-  def getMazeDistance(self, pos1, pos2):
     """
-    Returns the distance between two points; These are calculated using the provided
-    distancer object.
-
-    If distancer.getMazeDistances() has been called, then maze distances are available.
-    Otherwise, this just returns Manhattan distance.
+    build the MCTS tree
     """
-    d = self.distancer.getDistance(pos1, pos2)
-    return d
 
-  def update(self, state):
-    self.states.append(state)
+    def __init__(self, game_state, player_index, **kwargs):
 
-  # def takeToEmptyAlley(self, gameState, action, depth):
-  #     """
-  #     Verify if an action takes the agent to an alley with
-  #     no pacdots.
-  #     """
-  #     old_score = gameState.getScore()
-  #     new_state = gameState.generateSuccessor(self.index, action)
-  #     new_score = new_state.getScore()
-  #     if old_score < new_score or depth == 0:
-  #         return False
-  #     actions = new_state.getLegalActions(self.index)
-  #     actions.remove(Directions.STOP)
-  #     reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
-  #     if reversed_direction in actions:
-  #         actions.remove(reversed_direction)
-  #     if len(actions) == 0:
-  #         return True
-  #     for a in actions:
-  #         if not self.takeToEmptyAlley(new_state, a, depth - 1):
-  #             return False
-  #     return True
+        # define the time allowed for simulation
+        seconds = kwargs.get('time', 0.5)
+        self.calculate_time = datetime.timedelta(seconds=seconds)
 
-  def get_play(self):
-    # Causes the AI to calculate the best move from the
-    # current game state and return it.
-    # print "INDEX: ", self.index
-    state = self.states[-1]
-    legal = state.getLegalActions(self.index)
-    legal.remove('Stop')
+        self.max_moves = kwargs.get('max_moves', 20)
+        self.states = [game_state]
+        self.index = player_index
+        self.wins = util.Counter()
+        self.plays = util.Counter()
+        self.C = kwargs.get('C', 1)
+        self.distancer = distanceCalculator.Distancer(game_state.data.layout)
+        self.distancer.getMazeDistances()
+        self.gameState = game_state
 
-    # for action in legal:
-    #     if self.takeToEmptyAlley(self.gameState, action, 10):
-    #         legal.remove(action)
+        if game_state.isOnRedTeam(self.index):
+            self.enemies = game_state.getBlueTeamIndices()
+            self.foodlist = game_state.getBlueFood()
+            self.capsule = game_state.getBlueCapsules()
+        else:
+            self.enemies = game_state.getRedTeamIndices()
+            self.foodlist = game_state.getRedFood()
+            self.capsule = game_state.getRedCapsules()
 
-    # Bail out early if there is no real choice to be made.
-    if not legal:
-        return
-    if len(legal) == 1:
-        return legal[0], 0.0
+    def getMazeDistance(self, pos1, pos2):
+        """
+        Returns the distance between two points; These are calculated using the provided
+        distancer object.
 
-    games = 0
+        If distancer.getMazeDistances() has been called, then maze distances are available.
+        Otherwise, this just returns Manhattan distance.
+        """
+        d = self.distancer.getDistance(pos1, pos2)
+        return d
 
-    begin = datetime.datetime.utcnow()
-    while datetime.datetime.utcnow() - begin < self.calculate_time:
-        self.run_simulation()
-        games += 1
-    # print "SIMULATION NUMBER: ", games
+    def update(self, state):
+        self.states.append(state)
 
-    moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal]
+    def takeToEmptyAlley(self, gameState, action, depth):
+        """
+        Verify if an action takes the agent to an alley with
+        no pacdots.
+        """
+        old_score = gameState.getScore()
+        new_state = gameState.generateSuccessor(self.index, action)
+        new_score = new_state.getScore()
+        if old_score < new_score or depth == 0:
+            return False
+        actions = new_state.getLegalActions(self.index)
+        actions.remove(Directions.STOP)
+        reversed_direction = Directions.REVERSE[new_state.getAgentState(self.index).configuration.direction]
+        if reversed_direction in actions:
+            actions.remove(reversed_direction)
+        if len(actions) == 0:
+            return True
+        for a in actions:
+            if not self.takeToEmptyAlley(new_state, a, depth - 1):
+                return False
+        return True
 
-    # Display the number of calls of `run_simulation` and the
-    # time elapsed.
-    # print games, datetime.datetime.utcnow() - begin
+    def get_play(self):
+        # Causes the AI to calculate the best move from the
+        # current game state and return it.
+        # print "INDEX: ", self.index
+        state = self.states[-1]
+        legal = state.getLegalActions(self.index)
+        legal.remove('Stop')
 
-    # Pick the move with the highest percentage of wins.
-    # for p, S in moves_states:
+        for action in legal:
+            if self.takeToEmptyAlley(self.gameState, action, 6):
+                legal.remove(action)
+                print "EMPTY ALLEY REMOVED"
+
+        # Bail out early if there is no real choice to be made.
+        if not legal:
+            return
+        if len(legal) == 1:
+            return legal[0], 0.0
+
+        games = 0
+
+        begin = datetime.datetime.utcnow()
+        while datetime.datetime.utcnow() - begin < self.calculate_time:
+            self.run_simulation()
+            games += 1
+        # print "SIMULATION NUMBER: ", games
+
+        moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal]
+
+        # Display the number of calls of `run_simulation` and the
+        # time elapsed.
+        print games, datetime.datetime.utcnow() - begin
+
+        # Pick the move with the highest percentage of wins.
+        # for p, S in moves_states:
         # print "CURRENT WINS: ", self.wins.get((self.index, S.getAgentState(self.index).getPosition()))
         # print "CURRENT PLAYS: ", self.plays.get((self.index, S.getAgentState(self.index).getPosition()))
         # print "CURRENT PERCENTAGE: ", float(self.wins.get((self.index, S.getAgentState(self.index).getPosition()), 0)) / float(self.plays.get((self.index, S.getAgentState(self.index).getPosition()), 1))
         # print "CURRENET MOVE: ", p
         # print " "
 
-    percent_wins, move = max((float(self.wins.get((self.index, S.getAgentState(self.index).getPosition()), 0)) / float(self.plays.get((self.index, S.getAgentState(self.index).getPosition()), 1)), p)for p, S in moves_states)
+        percent_wins, move = max((float(
+            self.wins.get((self.index, S.getAgentState(self.index).getPosition()), 0)) / float(
+            self.plays.get((self.index, S.getAgentState(self.index).getPosition()), 1)), p) for p, S in moves_states)
 
-    # print "AGENT INDEX: ", self.index
-    # print "PERCENTAGE: ", percent_wins
-    # print "MOVE: ", move
-    # print " "
-    # print " "
-    # print " "
+        # print "AGENT INDEX: ", self.index
+        # print "PERCENTAGE: ", percent_wins
+        # print "MOVE: ", move
+        # print " "
+        # print " "
+        # print " "
 
-    return move, percent_wins
+        return move, percent_wins
 
+    def run_simulation(self):
+        # Plays out a "random" game from the current position,
+        # then updates the statistics tables with the result.
+        state_copy = self.states[:]
+        state = state_copy[-1]
+        visited_states = set()
+        visited_states.add(state)
+        states_path = [state]
 
+        enemies = [state.getAgentState(i) for i in self.enemies if state.getAgentState(i).scaredTimer < 6]
+        ghost = [a for a in enemies if a.getPosition() != None and not a.isPacman]
+        invaders = [a for a in enemies if a.isPacman]
 
-  def run_simulation(self):
-    # Plays out a "random" game from the current position,
-    # then updates the statistics tables with the result.
-    state_copy = self.states[:]
-    state = state_copy[-1]
-    visited_states = set()
-    visited_states.add(state)
-    states_path = [state]
+        c, d = state.getAgentState(self.index).getPosition()
 
-    enemies = [state.getAgentState(i) for i in self.enemies if state.getAgentState(i).scaredTimer < 6]
-    ghost = [a for a in enemies if a.getPosition() != None and not a.isPacman]
-    invaders = [a for a in enemies if a.isPacman]
+        expand = True
+        for i in xrange(1, self.max_moves + 1):
+            state = state_copy[-1]
+            # make i evaluates lazily
+            legal_move = state.getLegalActions(self.index)
+            legal_move.remove('Stop')
 
-    c, d = state.getAgentState(self.index).getPosition()
+            # Bail out early if there is no real choice to be made.
+            if not legal_move:
+                return
 
-    expand = True
-    for i in xrange(1,self.max_moves+1):
-      state = state_copy[-1]
-      # make i evaluates lazily
-      legal_move = state.getLegalActions(self.index)
-      legal_move.remove('Stop')
+            moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal_move]
 
-      # Bail out early if there is no real choice to be made.
-      if not legal_move:
-        return
+            # check if all the results in the legal_move are in the plays dictionary
+            # if they are, use UBT1 to make choice
+            if all(self.plays.get((self.index, S.getAgentState(self.index).getPosition())) for p, S in moves_states):
 
-      moves_states = [(p, state.generateSuccessor(self.index, p)) for p in legal_move]
+                # the number of times state has been visited.
+                if self.plays[(self.index, state.getAgentState(self.index).getPosition())] == 0.0:
+                    log_total = 0.5
 
-      # check if all the results in the legal_move are in the plays dictionary
-      # if they are, use UBT1 to make choice
-      if all(self.plays.get((self.index, S.getAgentState(self.index).getPosition())) for p, S in moves_states):
+                else:
+                    log_total = float(
+                        2.0 * log(self.plays[(self.index, state.getAgentState(self.index).getPosition())]))
 
-        # the number of times state has been visited.
-        if self.plays[(self.index, state.getAgentState(self.index).getPosition())] == 0.0:
-            log_total = 0.5
+                value, move, nstate = max(
+                    ((float(self.wins[(self.index, S.getAgentState(self.index).getPosition())]) / float(
+                        self.plays[(self.index, S.getAgentState(self.index).getPosition())])) +
+                     2 * self.C * sqrt(
+                         log_total / float(self.plays[(self.index, S.getAgentState(self.index).getPosition())])), p, S)
+                    for p, S in moves_states
+                )
+            else:
+                # if not, make a random choice
+                move, nstate = choice(moves_states)
 
-        else:
-            log_total = float(2.0 * log(self.plays[(self.index, state.getAgentState(self.index).getPosition())]))
+            state_copy.append(nstate)
+            states_path.append(nstate)
 
-        value, move, nstate = max(
-          ((float(self.wins[(self.index, S.getAgentState(self.index).getPosition())]) / float(self.plays[(self.index, S.getAgentState(self.index).getPosition())])) +
-           2 * self.C * sqrt(log_total / float(self.plays[(self.index, S.getAgentState(self.index).getPosition())])), p, S)
-          for p, S in moves_states
-        )
-      else:
-        # if not, make a random choice
-        move, nstate = choice(moves_states)
+            if expand and (self.index, nstate.getAgentState(self.index).getPosition()) not in self.plays:
+                # expand the tree
+                expand = False
+                self.plays[(self.index, nstate.getAgentState(self.index).getPosition())] = 0.0
+                self.wins[(self.index, nstate.getAgentState(self.index).getPosition())] = 0.0
 
+            visited_states.add(nstate)
 
-      state_copy.append(nstate)
-      states_path.append(nstate)
+            # Computes distance to enemies we can see
 
-      if expand and (self.index, nstate.getAgentState(self.index).getPosition()) not in self.plays:
-        # expand the tree
-        expand = False
-        self.plays[(self.index,nstate.getAgentState(self.index).getPosition())] = 0.0
-        self.wins[(self.index, nstate.getAgentState(self.index).getPosition())] = 0.0
+            if len(invaders) != 0:
+                ## if see a invader and ate it, win +1
+                ate = False
+                for a in invaders:
+                    if nstate.getAgentState(self.index).getPosition() == a.getPosition():
+                        ate = True
+                        break
+                if ate:
+                    # record number of wins
+                    for s in states_path:
+                        if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                            continue
+                        self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
+                        # print self.index, "EAT GHOST +1"
+                    break
 
-      visited_states.add(nstate)
+            x, y = nstate.getAgentState(self.index).getPosition()
 
-      # Computes distance to enemies we can see
+            if len(ghost) > 0:
 
-      if len(invaders) != 0:
-          ## if see a invader and ate it, win +1
-          ate = False
-          for a in invaders:
-              if nstate.getAgentState(self.index).getPosition() == a.getPosition():
-                  ate = True
-                  break
-          if ate:
-              # record number of wins
-              for s in states_path:
-                  if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-                      continue
-                  self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
-                  # print self.index, "EAT GHOST +1"
-              break
+                cur_dist_to_ghost, a = min([(self.getMazeDistance((c, d), a.getPosition()), a) for a in ghost])
 
+                if util.manhattanDistance((c, d), a.getPosition()) < 6:
 
-      x, y = nstate.getAgentState(self.index).getPosition()
+                    next_dist_to_ghost = min((self.getMazeDistance((x, y), a.getPosition()) for a in ghost))
 
-      if len(ghost) > 0:
+                    # print "CURRENT", cur_dist_to_ghost
+                    # print "NEXT", next_dist_to_ghost
 
-          cur_dist_to_ghost, a = min([(self.getMazeDistance((c, d), a.getPosition()), a) for a in ghost])
+                    if next_dist_to_ghost - cur_dist_to_ghost > 3:
+                        # record number of wins
+                        for s in states_path:
+                            if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                                continue
+                            self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
+                            # print self.index, "AVOID NEARBY GHOST +1"
+                        break
 
-          if util.manhattanDistance((c,d), a.getPosition()) < 6:
+                    if next_dist_to_ghost < cur_dist_to_ghost:
+                        break
 
-              next_dist_to_ghost = min((self.getMazeDistance((x, y), a.getPosition()) for a in ghost))
+            if len(self.capsule) != 0:
+                dist_to_capsule, a = min([(self.getMazeDistance((x, y), a), a) for a in self.capsule])
 
-              # print "CURRENT", cur_dist_to_ghost
-              # print "NEXT", next_dist_to_ghost
+                if nstate.getAgentState(self.index).getPosition() == a:
+                    # record number of wins
+                    for s in states_path:
+                        if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                            continue
+                        self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.002
+                        # print self.index, "EAT CAPSULE +1"
+                    break
 
-              if next_dist_to_ghost - cur_dist_to_ghost > 3:
-                  # record number of wins
-                  for s in states_path:
-                      if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-                          continue
-                      self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
-                      # print self.index, "AVOID NEARBY GHOST +1"
-                  break
+            if abs(nstate.getScore() - state.getScore()) > 3:
+                # record number of wins
+                for s in states_path:
+                    if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                        continue
+                    self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.6
+                    # print self.index, "RETURN FOOD +1"
+                break
 
-              if next_dist_to_ghost < cur_dist_to_ghost:
-                  break
+            """""
+      
+            if nstate.getAgentState(self.index).numCarrying - state.getAgentState(self.index).numCarrying > 0 and len(nghost) == 0:
+                # record number of wins
+                for s in states_path:
+                    if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                        continue
+                    self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.0
+                    # print self.index, "AVOID GHOST AND EAT DOTS +1"
+                break
+            """""
 
-      if len(self.capsule) != 0:
-          dist_to_capsule, a = min([(self.getMazeDistance((x, y), a), a) for a in self.capsule])
-
-          if nstate.getAgentState(self.index).getPosition() == a:
-              # record number of wins
-              for s in states_path:
-                  if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-                      continue
-                  self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.002
-                  # print self.index, "EAT CAPSULE +1"
-              break
-
-      if abs(nstate.getScore() - state.getScore()) > 3:
-          # record number of wins
-          for s in states_path:
-              if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-                  continue
-              self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.6
-              # print self.index, "RETURN FOOD +1"
-          break
-
-      """""
-
-      if nstate.getAgentState(self.index).numCarrying - state.getAgentState(self.index).numCarrying > 0 and len(nghost) == 0:
-          # record number of wins
-          for s in states_path:
-              if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-                  continue
-              self.wins[(self.index, s.getAgentState(self.index).getPosition())] += 0.0
-              # print self.index, "AVOID GHOST AND EAT DOTS +1"
-          break
-      """""
-
-    for s in states_path:
-      # record number of plays
-      if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
-        continue
-      self.plays[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
+        for s in states_path:
+            # record number of plays
+            if (self.index, s.getAgentState(self.index).getPosition()) not in self.plays:
+                continue
+            self.plays[(self.index, s.getAgentState(self.index).getPosition())] += 1.0
