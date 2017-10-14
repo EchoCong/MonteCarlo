@@ -8,7 +8,6 @@ from random import choice
 from math import log, sqrt
 
 import sys
-
 sys.path.append('teams/<your team>/')
 
 
@@ -40,7 +39,6 @@ class EvaluationBasedAgent(CaptureAgent):
     # Implemente este metodo para pre-processamento (15s max).
 
     def registerInitialState(self, gameState):
-        print gameState.data.layout
         CaptureAgent.registerInitialState(self, gameState)
         self.distancer.getMazeDistances()
         self.start = gameState.getAgentPosition(self.index)
@@ -58,30 +56,13 @@ class EvaluationBasedAgent(CaptureAgent):
 
     def getNearestGhost(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
-        # print "MY POSITION", myPos
-        # print "MY POSITION", myPos
         ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
-        # print "ALL GHOST NUM ", len(ghostsAll)
-        # for ghost in ghostsAll:
-        # print "GHOST IN GHOSTALL",ghost[0].getPosition()," ", ghost[1]
-
         ghostsInRange = [ghost for ghost in ghostsAll if
                          ghost.getPosition() is not None and
                          util.manhattanDistance(myPos, ghost.getPosition()) <= 5]
-        # for ghost in ghostsInRange:
-        # print "GHOST IN RANGE", ghost[0].getPosition()," ", ghost[1]
-        # print "VIEW GHOST NUM ", len(ghostsInRange)
 
         if len(ghostsInRange) > 0:
-            # Pos, state = min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
-            # print "GHOST INDEX", state[1], state[0].getPosition()
-            # print "GHOST INDEX", state[1], state[0].getPosition()
-            # print "GHOST INDEX", state[1], state[0].getPosition()
-            # print "MAZE DISTANCE", self.getMazeDistance(myPos, state[0].getPosition())
-            # print "MANH DISTANCE", util.manhattanDistance(myPos, state[0].getPosition())
-
             return min([(self.getMazeDistance(myPos, ghost.getPosition()), ghost) for ghost in ghostsInRange])
-        # print "NO NEAREST GHOST!"
 
         return None, None
 
@@ -150,10 +131,6 @@ class EvaluationBasedAgent(CaptureAgent):
 
         action, percent_wins = MCTSNode(gameState, self.index).get_play()
 
-        '''
-        You should change this in your own agent.
-        '''
-
         legal = gameState.getLegalActions(self.index)
         legal.remove('Stop')
         moves_states = [(p, gameState.generateSuccessor(self.index, p)) for p in legal]
@@ -211,9 +188,6 @@ class Attacker(EvaluationBasedAgent):
         mates = self.getTeam(gameState)
         mates.remove(self.index)
 
-        # print "CARRYING POTS", gameState.getAgentState(self.index).numCarrying
-        # print ""
-
         if len(self.getFood(gameState).asList()) <= 2:
             return self.getUCTActions(gameState)
 
@@ -221,8 +195,6 @@ class Attacker(EvaluationBasedAgent):
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateGhostDist > myGhostDist:
-                # print self.index," Help Mate!"
-                # print ""
                 return self.getBFSAction(gameState, nearestGhost.getPosition())
 
         """
@@ -238,19 +210,12 @@ class Attacker(EvaluationBasedAgent):
         if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 6) or nearestGhost.scaredTimer > 5:
             if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15) \
                     or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
-                # print self.index, " Compare Distance"
-                # print ""
                 return self.getEatAction(gameState, nearestFood)
 
         if nearestGhost is not None and not nearestGhost.isPacman and \
                         nearestCapsule is not None and capsuleDist + 3 < myGhostDist:
-            # print self.index, " Capsule"
-            # print ""
-
             return self.getEatAction(gameState, nearestCapsule)
 
-        # print self.index, " UCT"
-        # print ""
         return self.getUCTActions(gameState)
 
 
@@ -469,7 +434,7 @@ class MCTSNode:
         for action in legal:
             if self.takeToEmptyAlley(self.gameState, action, 6):
                 legal.remove(action)
-                print "EMPTY ALLEY REMOVED"
+                # print "EMPTY ALLEY REMOVED"
 
         # Bail out early if there is no real choice to be made.
         if not legal:
@@ -489,7 +454,7 @@ class MCTSNode:
 
         # Display the number of calls of `run_simulation` and the
         # time elapsed.
-        print games, datetime.datetime.utcnow() - begin
+        # print games, datetime.datetime.utcnow() - begin
 
         # Pick the move with the highest percentage of wins.
         # for p, S in moves_states:
