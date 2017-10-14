@@ -21,15 +21,10 @@ def createTeam(firstIndex, secondIndex, isRed,
     behavior is what you want for the nightly contest.
     """
     return [eval(first)(firstIndex), eval(second)(secondIndex)]
-#############
-# FACTORIES #
-###############################################
-# Instanciam os agentes no inicio da partida. #
-# Devem estender a classe base AgentFactory.  #
-###############################################
 
 class MonteCarloFactory(AgentFactory):
     "Gera um time MonteCarloTeam"
+
 
     def __init__(self, isRed):
         AgentFactory.__init__(self, isRed)
@@ -42,14 +37,10 @@ class MonteCarloFactory(AgentFactory):
                 return Attacker(index)
         return Defender(index)
 
-        #############
-
-
-# AGENTS   #
-###############################################
-# Implementacoes dos agentes.                 #
-# Devem estender a classe base CaptureAgent.  #
-###############################################
+#########################################################
+#  Evaluation Based CaptureAgent.                       #
+#  Provide functions used by both attacker and defender #
+#########################################################
 
 class EvaluationBasedAgent(CaptureAgent):
     def getSuccessor(self, gameState, action):

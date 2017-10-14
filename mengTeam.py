@@ -43,7 +43,6 @@ class MonteCarloFactory(AgentFactory):
             if agent == 'attacker':
                 return Attacker(index)
         return Defender(index)
-
 #########################################################
 #  Evaluation Based CaptureAgent.                       #
 #  Provide functions used by both attacker and defender #
@@ -150,6 +149,7 @@ class EvaluationBasedAgent(CaptureAgent):
         moves_states = [(p, gameState.generateSuccessor(self.index, p)) for p in legal]
 
         foodlist = self.getFood(gameState).asList()
+
         foodLeft = len(self.getFood(gameState).asList())
 
         if foodLeft <= 2:
@@ -182,11 +182,15 @@ class Attacker(EvaluationBasedAgent):
 
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
+        # Variables used to verify if the agent is locked
+        self.numEnemyFood = "+inf"
+        self.inactiveTime = 0
 
     def chooseAction(self, gameState):
         """
         Choose next action according to strategy.
         """
+        # begin = datetime.datetime.utcnow()
 
         '''Strategy 1: Give up last two foods.'''
         myGhostDist, nearestGhost = self.getNearestGhost(gameState)
@@ -195,6 +199,7 @@ class Attacker(EvaluationBasedAgent):
 
         if len(self.getFood(gameState).asList()) <= 2:
             uctAction = self.getUCTAction(gameState)
+            # print "FINAL TWO FOOD TIME ", datetime.datetime.utcnow() - begin
             return uctAction
 
         '''Strategy 2: BFS eat enemy when ally not around.'''
@@ -203,25 +208,34 @@ class Attacker(EvaluationBasedAgent):
             mates.remove(self.index)
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
-            if  mateGhostDist > myGhostDist >= 6:
-                helpAction = self.getGreedyAction(gameState, nearestGhost.getPosition())
-                return helpAction
+            if mateGhostDist > myGhostDist:
+                bfsAction = self.getGreedyAction(gameState, nearestGhost.getPosition())
+                # print "HELP MATE TIME ", datetime.datetime.utcnow() - begin
+                return bfsAction
 
         '''Strategy 3: Greedy eat foods when safe.'''
         if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 6) or nearestGhost.scaredTimer > 5:
             if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15) \
                     or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
-                foodAction = self.getGreedyAction(gameState, nearestFood)
-                return foodAction
+                eatAction = self.getGreedyAction(gameState, nearestFood)
+                # print "EAT FOOD TIME ", datetime.datetime.utcnow() - begin
+                return eatAction
 
         '''Strategy 4: Greedy eat capsule when half nearestGhostDistance closer than enemy.'''
         if nearestGhost is not None and not nearestGhost.isPacman and \
                         nearestCapsule is not None and capsuleDist <= myGhostDist / 2:
-            capsuleAction = self.getGreedyAction(gameState, nearestCapsule)
-            return capsuleAction
+            eatAction = self.getGreedyAction(gameState, nearestCapsule)
+            # print "EAT CAPSULE TIME ", datetime.datetime.utcnow() - begin
+            return eatAction
 
-        '''Strategy 5: other situations use UCT algorithm to trade off: score, escape and eat capsule.'''
+        """
+        Strategy 5: other situations use UCT algorithm to trade off:
+            1) Go home gain score
+            2) Run away from ghost
+            3) Eat capsule
+        """
         uctAction = self.getUCTAction(gameState)
+        # print "UCT ACTION TIME", datetime.datetime.utcnow() - begin
         return uctAction
 
 
@@ -271,9 +285,15 @@ class Defender(EvaluationBasedAgent):
     """
 
     def CleanPatrolPostions(self, height):
-        while len(self.patrolPosition) > (height - 2) / 2:
-            self.patrolPosition.pop(0)
-            self.patrolPosition.pop(len(self.patrolPosition) - 1)
+
+        if height > 18:
+            for i in range(0, 5):
+                self.patrolPosition.pop(0)
+                self.patrolPosition.pop(len(self.patrolPosition) - 1)
+        else:
+            while len(self.patrolPosition) > (height - 2) / 2:
+                self.patrolPosition.pop(0)
+                self.patrolPosition.pop(len(self.patrolPosition) - 1)
 
     """
         get the initial patrol positons. 
@@ -300,7 +320,7 @@ class Defender(EvaluationBasedAgent):
         self.getPatrolPosition(gameState)
         self.CleanPatrolPostions(gameState.data.layout.height)
 
-        # print 'patrol points', self.patrolPosition
+        print 'patrol points', self.patrolPosition
         # Update probabilities to each patrol point.
         self.distFoodToPatrol(gameState)
 
@@ -327,9 +347,9 @@ class Defender(EvaluationBasedAgent):
         for a in actions:
             new_state = gameState.generateSuccessor(self.index, a)
             if not new_state.getAgentState(self.index).isPacman and not a == Directions.STOP:
-                newpos = new_state.getAgentPosition(self.index)
+                newPos = new_state.getAgentPosition(self.index)
                 goodActions.append(a)
-                fvalues.append(self.getMazeDistance(newpos, self.target))
+                fvalues.append(self.getMazeDistance(newPos, self.target))
 
         best = min(fvalues)
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
@@ -547,14 +567,17 @@ class MCTSNode:
                         if s.getAgentState(self.index).getPosition() not in self.plays:
                             continue
                         self.wins[s.getAgentState(self.index).getPosition()] += 1.0
-                        # print self.index, "EAT GHOST +1"
+                        print self.index, "EAT GHOST +1"
                     break
 
             x, y = nstate.getAgentState(self.index).getPosition()
 
             if len(ghost) > 0:
+
                 cur_dist_to_ghost, a = min([(self.getMazeDistance((c, d), a.getPosition()), a) for a in ghost])
+
                 if util.manhattanDistance((c, d), a.getPosition()) < 6:
+
                     next_dist_to_ghost = min((self.getMazeDistance((x, y), a.getPosition()) for a in ghost))
 
                     if next_dist_to_ghost - cur_dist_to_ghost > 3 and abs(nstate.getScore() - state.getScore()) > 0:
