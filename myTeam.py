@@ -1,3 +1,15 @@
+# ###########################
+#   myTeam.py               #
+#   ----------------        #
+#   Group Information:      #
+#   Group Name: HelloWorld  #
+#   Member Information:     #
+#   Linlin Cong, 790432     #
+#   Zelong Cong, 732735     #
+#   Meng Qi, 791890         #
+# ###########################
+
+
 from captureAgents import CaptureAgent
 from captureAgents import AgentFactory
 from game import Directions
@@ -13,7 +25,7 @@ sys.path.append('teams/HelloWorld/')
 
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first='Attacker', second='Defender'):
+               first='Defender', second='Attacker'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -72,7 +84,7 @@ class EvaluationBasedAgent(CaptureAgent):
         myPos = gameState.getAgentState(self.index).getPosition()
         ghostsAll = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
         ghostsInRange = [ghost for ghost in ghostsAll if
-                         ghost.getPosition() is not None and
+                         (ghost.getPosition() is not None) and
                          util.manhattanDistance(myPos, ghost.getPosition()) <= 5]
 
         if len(ghostsInRange) > 0:
@@ -83,11 +95,11 @@ class EvaluationBasedAgent(CaptureAgent):
     def getNearestFood(self, gameState):
         myPos = gameState.getAgentState(self.index).getPosition()
         foods = self.getFood(gameState).asList()
-
-        nearFoodsNum = max(len([food for food in foods if self.getMazeDistance(food, myPos) <= 5]), 0)
-
+        oneStepFood = len([food for food in foods if self.getMazeDistance(myPos,food)==1])
+        twoStepFood = len([food for food in foods if self.getMazeDistance(myPos,food)==2])
+        passBy = (oneStepFood == 1 and twoStepFood == 0)
         if len(foods) > 0:
-            return min([(self.getMazeDistance(myPos, food), food, nearFoodsNum) for food in foods])
+            return min([(self.getMazeDistance(myPos, food), food, passBy) for food in foods])
         return None, None, None
 
     def getNearestCapsule(self, gameState):
@@ -118,7 +130,7 @@ class EvaluationBasedAgent(CaptureAgent):
                     queue.push((succState, path + [action]))
         return []
 
-    def getGreedyAction(self, gameState, nearestFood):
+    def getGreedyAction(self, gameState, goalPos):
         """
         Greedy Algorithm to eat nearest goal.
         """
@@ -130,13 +142,15 @@ class EvaluationBasedAgent(CaptureAgent):
             succState = gameState.generateSuccessor(self.index, action)
             succPos = succState.getAgentPosition(self.index)
             goodActions.append(action)
-            fvalues.append(self.getMazeDistance(succPos, nearestFood))
+            fvalues.append(self.getMazeDistance(succPos, goalPos))
 
         # Randomly chooses between ties.
         best = min(fvalues)
         ties = [combine for combine in zip(fvalues, goodActions) if combine[0] == best]
 
         return random.choice(ties)[1]
+
+
 
     def getUCTAction(self, gameState):
         """
@@ -174,14 +188,38 @@ class EvaluationBasedAgent(CaptureAgent):
                     action = p
         return action
 
+##############################
+#   Attacker Agent.          #
+##############################
 
 class Attacker(EvaluationBasedAgent):
-    """
-    Monte Carlo, offensive agent.
-    """
-
     def __init__(self, index):
         CaptureAgent.__init__(self, index)
+
+
+    def registerInitialState(self, gameState):
+        CaptureAgent.registerInitialState(self, gameState)
+        self.distancer.getMazeDistances()
+        self.start = gameState.getAgentPosition(self.index)
+        self.getPatrolPosition(gameState)
+
+    def getPatrolPosition(self, gameState):
+        width = gameState.data.layout.width
+        height = gameState.data.layout.height
+        if self.red:
+            centralX = (width - 2) / 2
+        else:
+            centralX = ((width - 2) / 2) + 1
+        self.patrolPosition = []
+        for i in range(1, height - 1):
+            if not gameState.hasWall(centralX, i):
+                self.patrolPosition.append((centralX, i))
+
+    def getNearestHome(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        nearestHomeDist, nearestHome  = min([(self.getMazeDistance(returnPos, myPos),returnPos)
+                                             for returnPos in self.patrolPosition])
+        return nearestHome
 
     def chooseAction(self, gameState):
         """
@@ -191,39 +229,51 @@ class Attacker(EvaluationBasedAgent):
         '''Strategy 1: Give up last two foods.'''
         myGhostDist, nearestGhost = self.getNearestGhost(gameState)
         capsuleDist, nearestCapsule = self.getNearestCapsule(gameState)
-        nearestFoodDist, nearestFood, nearFoodsNum = self.getNearestFood(gameState)
 
         if len(self.getFood(gameState).asList()) <= 2:
             uctAction = self.getUCTAction(gameState)
             return uctAction
 
         '''Strategy 2: BFS eat enemy when ally not around.'''
-        if nearestGhost is not None and nearestGhost.isPacman and gameState.getAgentState(self.index).scaredTimer == 0:
+        if (nearestGhost is not None) and nearestGhost.isPacman and gameState.getAgentState(self.index).scaredTimer == 0:
             mates = self.getTeam(gameState)
             mates.remove(self.index)
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
-            if  mateGhostDist > myGhostDist >= 6:
+            if  mateGhostDist > myGhostDist:
                 helpAction = self.getGreedyAction(gameState, nearestGhost.getPosition())
                 return helpAction
 
         '''Strategy 3: Greedy eat foods when safe.'''
-        if nearestGhost is None or (nearestGhost is not None and myGhostDist >= 6) or nearestGhost.scaredTimer > 5:
-            if (nearestFood is not None and nearFoodsNum >= 5 and gameState.getAgentState(self.index).numCarrying <= 15) \
-                    or (nearestFood is not None and gameState.getAgentState(self.index).numCarrying < 5):
-                foodAction = self.getGreedyAction(gameState, nearestFood)
-                return foodAction
+
+        if (nearestGhost is None) or ((nearestGhost is not None) and myGhostDist >= 6) \
+                or ((nearestGhost is not None) and nearestGhost.scaredTimer > 5):
+            nearestFoodDist, nearestFood, passBy = self.getNearestFood(gameState)
+            if gameState.getAgentState(self.index).numCarrying < 6 or passBy:
+                return self.getGreedyAction(gameState, nearestFood)
 
         '''Strategy 4: Greedy eat capsule when half nearestGhostDistance closer than enemy.'''
-        if nearestGhost is not None and not nearestGhost.isPacman and \
-                        nearestCapsule is not None and capsuleDist <= myGhostDist / 2:
-            capsuleAction = self.getGreedyAction(gameState, nearestCapsule)
-            return capsuleAction
 
-        '''Strategy 5: other situations use UCT algorithm to trade off: score, escape and eat capsule.'''
+        if (nearestGhost is not None) and (not nearestGhost.isPacman) and \
+                        (nearestCapsule is not None) and capsuleDist <= myGhostDist / 2:
+            return self.getGreedyAction(gameState, nearestCapsule)
+
+
+        if (nearestGhost is None) or ((nearestGhost is not None) and myGhostDist >= 6) \
+                or ((nearestGhost is not None) and nearestGhost.scaredTimer > 5):
+            if gameState.getAgentState(self.index).numCarrying >=5:
+
+                nearestHome = self.getNearestHome(gameState)
+                return self.getGreedyAction(gameState, nearestHome)
+
+        '''Strategy 5: other situations use UCT algorithm to trade off: invader, score, escape and eat capsule.'''
+
         uctAction = self.getUCTAction(gameState)
         return uctAction
 
+##############################
+#   Defender Agent.          #
+##############################
 
 class Defender(EvaluationBasedAgent):
     def __init__(self, index):
@@ -233,12 +283,7 @@ class Defender(EvaluationBasedAgent):
         self.patrolDict = {}
 
     def distFoodToPatrol(self, gameState):
-        """
-        This method calculates the minimum distance from our patrol
-        points to our pacdots. The inverse of this distance will
-        be used as the probability to select the patrol point as
-        target.
-        """
+
         foodListDefending = self.getFoodYouAreDefending(gameState).asList()
         # total = 0
 
@@ -386,7 +431,7 @@ class MCTSNode:
     def __init__(self, game_state, player_index, **kwargs):
 
         # define the time allowed for simulation
-        seconds = kwargs.get('time', 0.5)
+        seconds = kwargs.get('time', 0.6)
         self.calculate_time = datetime.timedelta(seconds=seconds)
 
         self.max_moves = kwargs.get('max_moves', 20)
@@ -487,6 +532,7 @@ class MCTSNode:
         invaders = [a for a in enemies if a.isPacman]
 
         c, d = state.getAgentState(self.index).getPosition()
+        current_score = state.getScore()
 
         expand = True
         for i in xrange(1, self.max_moves + 1):
@@ -533,7 +579,7 @@ class MCTSNode:
                 self.plays[nstate.getAgentState(self.index).getPosition()] = 0.0
                 self.wins[nstate.getAgentState(self.index).getPosition()] = 0.0
 
-
+            '''
             if len(invaders) != 0:
                 # if see a invader and ate it, win +1
                 ate = False
@@ -549,6 +595,7 @@ class MCTSNode:
                         self.wins[s.getAgentState(self.index).getPosition()] += 1.0
                         # print self.index, "EAT GHOST +1"
                     break
+            '''
 
             x, y = nstate.getAgentState(self.index).getPosition()
 
@@ -557,7 +604,10 @@ class MCTSNode:
                 if util.manhattanDistance((c, d), a.getPosition()) < 6:
                     next_dist_to_ghost = min((self.getMazeDistance((x, y), a.getPosition()) for a in ghost))
 
-                    if next_dist_to_ghost - cur_dist_to_ghost > 3 and abs(nstate.getScore() - state.getScore()) > 0:
+                    if next_dist_to_ghost < cur_dist_to_ghost:
+                        break
+
+                    if next_dist_to_ghost - cur_dist_to_ghost > 3 and abs(nstate.getScore() - current_score) > 0:
                         # record number of wins
                         for s in states_path:
                             if s.getAgentState(self.index).getPosition() not in self.plays:
@@ -565,7 +615,7 @@ class MCTSNode:
                             self.wins[s.getAgentState(self.index).getPosition()] += 1.0
                         break
 
-                    if next_dist_to_ghost - cur_dist_to_ghost > 3:
+                    if next_dist_to_ghost - cur_dist_to_ghost > 4:
                         # record number of wins
                         for s in states_path:
                             if s.getAgentState(self.index).getPosition() not in self.plays:
@@ -573,8 +623,7 @@ class MCTSNode:
                             self.wins[s.getAgentState(self.index).getPosition()] += 0.7
                         break
 
-                    if next_dist_to_ghost < cur_dist_to_ghost:
-                        break
+
 
             if len(self.capsule) != 0:
                 dist_to_capsule, a = min([(self.getMazeDistance((x, y), a), a) for a in self.capsule])
@@ -587,7 +636,7 @@ class MCTSNode:
                         self.wins[s.getAgentState(self.index).getPosition()] += 0.002
                     break
 
-            if abs(nstate.getScore() - state.getScore()) > 3:
+            if abs(nstate.getScore() - current_score) > 3:
                 # record number of wins
                 for s in states_path:
                     if s.getAgentState(self.index).getPosition() not in self.plays:

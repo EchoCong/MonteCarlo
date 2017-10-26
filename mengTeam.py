@@ -1,5 +1,4 @@
 from captureAgents import CaptureAgent
-from captureAgents import AgentFactory
 from game import Directions
 from util import nearestPoint
 import distanceCalculator
@@ -9,7 +8,7 @@ from random import choice
 from math import log, sqrt
 
 import sys
-sys.path.append('teams/HelloWorld/')
+sys.path.append('teams/<your team>/')
 
 
 def createTeam(firstIndex, secondIndex, isRed,
@@ -30,19 +29,7 @@ def createTeam(firstIndex, secondIndex, isRed,
     """
     return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
-class MonteCarloFactory(AgentFactory):
 
-
-    def __init__(self, isRed):
-        AgentFactory.__init__(self, isRed)
-        self.agentList = ['attacker', 'defender']
-
-    def getAgent(self, index):
-        if len(self.agentList) > 0:
-            agent = self.agentList.pop(0)
-            if agent == 'attacker':
-                return Attacker(index)
-        return Defender(index)
 #########################################################
 #  Evaluation Based CaptureAgent.                       #
 #  Provide functions used by both attacker and defender #
@@ -203,13 +190,13 @@ class Attacker(EvaluationBasedAgent):
             return uctAction
 
         '''Strategy 2: BFS eat enemy when ally not around.'''
-        if nearestGhost is not None and nearestGhost.isPacman and gameState.getAgentState(self.index).scaredTimer == 0:
+        if nearestGhost is not None and nearestGhost.isPacman:
             mates = self.getTeam(gameState)
             mates.remove(self.index)
             mateGhostDist = min(self.getMazeDistance(
                 nearestGhost.getPosition(), gameState.getAgentState(mate).getPosition()) for mate in mates)
             if mateGhostDist > myGhostDist:
-                bfsAction = self.getGreedyAction(gameState, nearestGhost.getPosition())
+                bfsAction = self.getBFSAction(gameState, nearestGhost.getPosition())
                 # print "HELP MATE TIME ", datetime.datetime.utcnow() - begin
                 return bfsAction
 
@@ -347,9 +334,9 @@ class Defender(EvaluationBasedAgent):
         for a in actions:
             new_state = gameState.generateSuccessor(self.index, a)
             if not new_state.getAgentState(self.index).isPacman and not a == Directions.STOP:
-                newPos = new_state.getAgentPosition(self.index)
+                newpos = new_state.getAgentPosition(self.index)
                 goodActions.append(a)
-                fvalues.append(self.getMazeDistance(newPos, self.target))
+                fvalues.append(self.getMazeDistance(newpos, self.target))
 
         best = min(fvalues)
         ties = filter(lambda x: x[0] == best, zip(fvalues, goodActions))
@@ -492,6 +479,7 @@ class MCTSNode:
             self.plays.get(S.getAgentState(self.index).getPosition(), 1)), p) for p, S in moves_states)
 
 
+        print move, percent_wins
         return move, percent_wins
 
     def uctSimulation(self):
